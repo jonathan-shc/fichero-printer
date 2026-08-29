@@ -78,6 +78,7 @@ class FicheroPrinterCard extends HTMLElement {
         input[type=number] { width:64px; padding:8px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); }
         .favorites { margin-top:16px; border-top:1px solid var(--divider-color); padding-top:14px; }
         .favorites-title { font-size:.9rem; color:var(--secondary-text-color); margin-bottom:8px; }
+        .error { margin:12px 0; padding:10px 12px; color:var(--error-color,#db4437); background:color-mix(in srgb,var(--error-color,#db4437) 10%,transparent); border-radius:8px; }
         .favorite { display:inline-flex; align-items:stretch; margin:0 8px 8px 0; background:var(--secondary-background-color); border-radius:10px; overflow:hidden; }
         .favorite button { border-radius:0; margin:0; }
         .favorite .remove { padding:8px; color:var(--secondary-text-color); }
@@ -88,6 +89,7 @@ class FicheroPrinterCard extends HTMLElement {
           <div><h2>Fichero label printer</h2><div class="status"><span class="dot"></span>${this._escape(state.state)}</div></div>
           <button id="connection" ${disabled}>${connected ? "Disconnect" : "Connect"}</button>
         </div>
+        ${state.attributes.last_error ? `<div class="error">${this._escape(state.attributes.last_error)}</div>` : ""}
         <textarea id="text" maxlength="500" placeholder="Text for your label">${this._escape(this._text)}</textarea>
         <div class="row">
           <label>Labels <input id="copies" type="number" min="1" max="100" value="${this._copies}"></label>
