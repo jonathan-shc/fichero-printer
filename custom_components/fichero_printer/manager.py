@@ -72,9 +72,13 @@ class FicheroManager:
     async def _press_switchbot(self) -> None:
         entity_id = self.entry.data[CONF_SWITCHBOT_ENTITY]
         domain = entity_id.split(".", 1)[0]
+        if self.hass.states.get(entity_id) is None:
+            raise HomeAssistantError(
+                f"Configured SwitchBot entity {entity_id} does not exist"
+            )
         service = "press" if domain in ("button", "input_button") else "turn_on"
         await self.hass.services.async_call(
-            domain if domain in ("button", "input_button") else "homeassistant",
+            domain,
             service,
             {"entity_id": entity_id},
             blocking=True,
@@ -101,20 +105,32 @@ class FicheroManager:
                 raise HomeAssistantError(f"Could not connect to the printer: {err}") from err
 
     async def _resolve_printer(self):
-        """Resolve through HA's shared scanner (including Bluetooth proxies)."""
+        """Wait for HA discovery, including advertisements from BLE proxies."""
         address = self.entry.data.get(CONF_ADDRESS)
-        if address and (device := bluetooth.async_ble_device_from_address(
-            self.hass, address, connectable=True
-        )):
-            return device
-        scanner = bluetooth.async_get_scanner(self.hass)
-        devices = await scanner.discover(timeout=8)
-        for device in devices:
-            if address and device.address.lower() == address.lower():
+        await bluetooth.async_request_active_scan(self.hass)
+        deadline = asyncio.get_running_loop().time() + 12
+        while asyncio.get_running_loop().time() < deadline:
+            if address and (device := bluetooth.async_ble_device_from_address(
+                self.hass, address, connectable=True
+            )):
                 return device
-            if not address and device.name and device.name.startswith(NAME_PREFIXES):
-                return device
-        raise HomeAssistantError("No Fichero/D11s printer found after powering it on")
+            for service_info in bluetooth.async_discovered_service_info(
+                self.hass, connectable=True
+            ):
+                device = service_info.device
+                if address and device.address.lower() == address.lower():
+                    return device
+                if (
+                    not address
+                    and service_info.name
+                    and service_info.name.startswith(NAME_PREFIXES)
+                ):
+                    return device
+            await asyncio.sleep(0.5)
+        target = address or "a device named FICHERO…/D11s_…"
+        raise HomeAssistantError(
+            f"No connectable Fichero printer advertisement found for {target}"
+        )
 
     def _on_disconnect(self, _client) -> None:
         self.client = None
