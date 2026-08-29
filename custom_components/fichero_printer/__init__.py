@@ -26,6 +26,7 @@ from .const import (
 from .manager import FicheroManager
 
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
     {vol.Required("text"): cv.string, vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100))}
 )

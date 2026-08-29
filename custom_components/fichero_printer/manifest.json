@@ -4,7 +4,7 @@
   "codeowners": ["@jonathan-shc"],
   "config_flow": true,
   "documentation": "https://github.com/jonathan-shc/fichero-printer",
-  "dependencies": ["bluetooth_adapters"],
+  "dependencies": ["bluetooth_adapters", "frontend", "http"],
   "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/jonathan-shc/fichero-printer/issues",
