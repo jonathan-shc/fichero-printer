@@ -76,7 +76,10 @@ class FicheroManager:
             raise HomeAssistantError(
                 f"Configured SwitchBot entity {entity_id} does not exist"
             )
-        service = "press" if domain in ("button", "input_button") else "turn_on"
+        # A SwitchBot Bot exposed as a switch is momentary: its on/off state is
+        # not the printer state. Toggling guarantees one physical press even
+        # when Home Assistant currently reports the switch as on.
+        service = "press" if domain in ("button", "input_button") else "toggle"
         await self.hass.services.async_call(
             domain,
             service,
