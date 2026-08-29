@@ -1,5 +1,7 @@
 # fichero-printer
 
+[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonathan-shc&repository=fichero-printer&category=integration)
+
 Web GUI, Python CLI, and protocol documentation for the Fichero D11s thermal label printer.
 
 Blog post: [Reverse Engineering Action's Cheap Fichero Labelprinter](https://blog.dbuglife.com/reverse-engineering-fichero-label-printer/)
@@ -145,11 +147,20 @@ dashboard card for the Fichero/D11s. It can:
 - show live powering-on, connecting, connected, printing, error, and disconnected
   status; and explicitly connect or disconnect/power off.
 
-### Install
+### Install with HACS
+
+Use the **Open in HACS** button above, or add
+`https://github.com/jonathan-shc/fichero-printer` as a custom repository with
+category **Integration**. Install **Fichero Label Printer**, restart Home
+Assistant, and add the integration under **Settings → Devices & services**.
+
+HACS installs releases when available and otherwise installs from this
+repository's default branch.
+
+### Manual install
 
 Copy `custom_components/fichero_printer` into the same directory under your Home
-Assistant configuration, then restart Home Assistant. Alternatively, add this
-repository as a custom HACS integration repository.
+Assistant configuration, then restart Home Assistant.
 
 In Home Assistant, go to **Settings → Devices & services → Add integration**, find
 **Fichero Label Printer**, and configure:
