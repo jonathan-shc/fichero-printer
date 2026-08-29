@@ -94,32 +94,103 @@ class FicheroManager:
         )
 
     async def async_connect(self) -> None:
+        """Connect to the printer, powering it on only when necessary."""
         async with self._operation_lock:
             if self.connected:
-                return
-            try:
-                target = self._visible_printer()
-                if target is None:
-                    self._set_status("powering_on")
-                    await self._press_switchbot()
-                    await asyncio.sleep(self.entry.data[CONF_STARTUP_DELAY])
-                self._set_status("connecting")
-                target = target or await self._resolve_printer()
-                client = BleakClient(target, disconnected_callback=self._on_disconnect)
-                await client.connect(timeout=15)
-                await client.start_notify(NOTIFY_UUID, self._on_notify)
-                self.client = client
                 self._set_status("connected")
-            except Exception as err:
-                self.client = None
-                self._set_status("error", str(err))
-                raise HomeAssistantError(f"Could not connect to the printer: {err}") from err
+                return
 
-    async def _resolve_printer(self):
+            # First assume the printer may already be powered on.
+            # Never press the SwitchBot just because discovery is temporarily
+            # slow or the printer advertisement has not appeared yet.
+            try:
+                self._set_status("connecting")
+                target = self._visible_printer()
+
+                if target is None:
+                    target = await self._resolve_printer(timeout=5)
+
+                if target is not None:
+                    await self._connect_to_printer(target)
+                    return
+
+            except Exception as err:
+                _LOGGER.debug(
+                    "Printer is not reachable before SwitchBot press: %s",
+                    err,
+                )
+                self.client = None
+
+            # The printer really does not appear to be reachable.
+            # Press SwitchBot once and then wait for the printer to become
+            # actually connectable instead of relying on a fixed delay.
+            self._set_status("powering_on")
+            await self._press_switchbot()
+
+            deadline = asyncio.get_running_loop().time() + 30
+
+            while asyncio.get_running_loop().time() < deadline:
+                try:
+                    self._set_status("connecting")
+
+                    target = self._visible_printer()
+
+                    if target is None:
+                        try:
+                            target = await self._resolve_printer(timeout=3)
+                        except Exception:
+                            target = None
+
+                    if target is not None:
+                        await self._connect_to_printer(target)
+                        return
+
+                except Exception as err:
+                    _LOGGER.debug(
+                        "Printer not ready after SwitchBot press: %s",
+                        err,
+                    )
+                    self.client = None
+
+                await asyncio.sleep(2)
+
+            self._set_status(
+                "error",
+                "Printer did not become reachable after SwitchBot press",
+            )
+            raise HomeAssistantError(
+                "Printer did not become reachable after SwitchBot press"
+            )
+
+    async def _connect_to_printer(self, target) -> None:
+        """Connect to the printer and establish notifications."""
+        client = BleakClient(
+            target,
+            disconnected_callback=self._on_disconnect,
+        )
+
+        try:
+            await client.connect(timeout=15)
+            await client.start_notify(NOTIFY_UUID, self._on_notify)
+
+            self.client = client
+            self._set_status("connected")
+
+            _LOGGER.debug("Fichero printer connected: %s", target)
+
+        except Exception:
+            try:
+                if client.is_connected:
+                    await client.disconnect()
+            except Exception:
+                pass
+            raise
+
+    async def _resolve_printer(self, timeout: float = 12):
         """Wait for HA discovery, including advertisements from BLE proxies."""
         address = self.entry.data.get(CONF_ADDRESS)
         await bluetooth.async_request_active_scan(self.hass)
-        deadline = asyncio.get_running_loop().time() + 12
+        deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             if device := self._visible_printer():
                 return device
