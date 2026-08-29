@@ -107,9 +107,6 @@ class FicheroManager:
                 self._set_status("connecting")
                 target = self._visible_printer()
 
-                if target is None:
-                    target = await self._resolve_printer(timeout=5)
-
                 if target is not None:
                     await self._connect_to_printer(target)
                     return
