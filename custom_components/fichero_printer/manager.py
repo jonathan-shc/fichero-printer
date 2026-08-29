@@ -76,7 +76,10 @@ class FicheroManager:
             raise HomeAssistantError(
                 f"Configured SwitchBot entity {entity_id} does not exist"
             )
-        service = "press" if domain in ("button", "input_button") else "turn_on"
+        # A SwitchBot Bot exposed as a switch is momentary: its on/off state is
+        # not the printer state. Toggling guarantees one physical press even
+        # when Home Assistant currently reports the switch as on.
+        service = "press" if domain in ("button", "input_button") else "toggle"
         await self.hass.services.async_call(
             domain,
             service,
@@ -88,12 +91,14 @@ class FicheroManager:
         async with self._operation_lock:
             if self.connected:
                 return
-            self._set_status("powering_on")
             try:
-                await self._press_switchbot()
-                await asyncio.sleep(self.entry.data[CONF_STARTUP_DELAY])
+                target = self._visible_printer()
+                if target is None:
+                    self._set_status("powering_on")
+                    await self._press_switchbot()
+                    await asyncio.sleep(self.entry.data[CONF_STARTUP_DELAY])
                 self._set_status("connecting")
-                target = await self._resolve_printer()
+                target = target or await self._resolve_printer()
                 client = BleakClient(target, disconnected_callback=self._on_disconnect)
                 await client.connect(timeout=15)
                 await client.start_notify(NOTIFY_UUID, self._on_notify)
@@ -110,27 +115,46 @@ class FicheroManager:
         await bluetooth.async_request_active_scan(self.hass)
         deadline = asyncio.get_running_loop().time() + 12
         while asyncio.get_running_loop().time() < deadline:
-            if address and (device := bluetooth.async_ble_device_from_address(
-                self.hass, address, connectable=True
-            )):
+            if device := self._visible_printer():
                 return device
-            for service_info in bluetooth.async_discovered_service_info(
-                self.hass, connectable=True
-            ):
-                device = service_info.device
-                if address and device.address.lower() == address.lower():
-                    return device
-                if (
-                    not address
-                    and service_info.name
-                    and service_info.name.startswith(NAME_PREFIXES)
-                ):
-                    return device
             await asyncio.sleep(0.5)
         target = address or "a device named FICHERO…/D11s_…"
-        raise HomeAssistantError(
-            f"No connectable Fichero printer advertisement found for {target}"
+        service_infos = bluetooth.async_discovered_service_info(
+            self.hass, connectable=True
         )
+        nearby = sorted(
+            {info.name for info in service_infos if info.name}
+        )[:8]
+        scanner_count = bluetooth.async_scanner_count(self.hass, connectable=True)
+        detail = f"{scanner_count} connectable Bluetooth scanner(s)"
+        if nearby:
+            detail += f"; nearby names: {', '.join(nearby)}"
+        else:
+            detail += "; no connectable Bluetooth advertisements visible"
+        raise HomeAssistantError(
+            f"No connectable Fichero printer advertisement found for {target} "
+            f"({detail})"
+        )
+
+    def _visible_printer(self):
+        """Return a currently visible configured or name-matched printer."""
+        address = self.entry.data.get(CONF_ADDRESS)
+        if address and (device := bluetooth.async_ble_device_from_address(
+            self.hass, address, connectable=True
+        )):
+            return device
+        for service_info in bluetooth.async_discovered_service_info(
+            self.hass, connectable=True
+        ):
+            device = service_info.device
+            if address and device.address.lower() == address.lower():
+                return device
+            name = service_info.name or device.name or ""
+            if not address and name.lower().startswith(
+                tuple(prefix.lower() for prefix in NAME_PREFIXES)
+            ):
+                return device
+        return None
 
     def _on_disconnect(self, _client) -> None:
         self.client = None
