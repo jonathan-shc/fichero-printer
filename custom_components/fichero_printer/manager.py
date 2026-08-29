@@ -30,6 +30,12 @@ PRINTHEAD_PX = 96
 BYTES_PER_ROW = 12
 DOTS_PER_MM = 8
 NAME_PREFIXES = ("FICHERO", "D11s_")
+UART_SERVICE_UUIDS = {
+    "000018f0-0000-1000-8000-00805f9b34fb",
+    "0000ff00-0000-1000-8000-00805f9b34fb",
+    "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
+    "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+}
 
 
 class FicheroManager:
@@ -122,13 +128,11 @@ class FicheroManager:
         service_infos = bluetooth.async_discovered_service_info(
             self.hass, connectable=True
         )
-        nearby = sorted(
-            {info.name for info in service_infos if info.name}
-        )[:8]
+        nearby = [self._describe_advertisement(info) for info in service_infos[:8]]
         scanner_count = bluetooth.async_scanner_count(self.hass, connectable=True)
         detail = f"{scanner_count} connectable Bluetooth scanner(s)"
         if nearby:
-            detail += f"; nearby names: {', '.join(nearby)}"
+            detail += f"; nearby devices: {', '.join(nearby)}"
         else:
             detail += "; no connectable Bluetooth advertisements visible"
         raise HomeAssistantError(
@@ -154,7 +158,24 @@ class FicheroManager:
                 tuple(prefix.lower() for prefix in NAME_PREFIXES)
             ):
                 return device
+            advertised_services = {
+                uuid.lower() for uuid in (service_info.service_uuids or [])
+            }
+            if not address and advertised_services & UART_SERVICE_UUIDS:
+                return device
         return None
+
+    @staticmethod
+    def _describe_advertisement(service_info) -> str:
+        """Build a compact diagnostic description for the dashboard card."""
+        name = service_info.name or service_info.device.name or "unnamed"
+        address = service_info.device.address
+        services = [
+            uuid.split("-", 1)[0]
+            for uuid in (service_info.service_uuids or [])
+        ]
+        suffix = f"; services {','.join(services)}" if services else "; no services"
+        return f"{name} [{address}{suffix}]"
 
     def _on_disconnect(self, _client) -> None:
         self.client = None
