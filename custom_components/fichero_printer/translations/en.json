@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up your Fichero label printer",
+        "description": "The Bluetooth address is optional; leave it blank to scan whenever a session starts. Select the existing SwitchBot entity that presses the printer's power button.",
+        "data": {
+          "name": "Name",
+          "address": "Bluetooth address (optional)",
+          "switchbot_entity": "SwitchBot press entity",
+          "startup_delay": "Seconds to wait after pressing",
+          "label_length": "Label length (mm)",
+          "density": "Print density",
+          "power_off_on_disconnect": "Press SwitchBot when disconnecting"
+        }
+      }
+    }
+  }
+}

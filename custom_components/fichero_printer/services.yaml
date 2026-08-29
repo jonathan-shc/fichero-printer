@@ -1,0 +1,70 @@
+connect:
+  name: Connect
+  description: Press the configured SwitchBot and open a Bluetooth session.
+  fields:
+    config_entry_id:
+      name: Printer configuration
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer
+disconnect:
+  name: Disconnect
+  description: Close Bluetooth and optionally press the configured SwitchBot to power off.
+  fields:
+    config_entry_id:
+      name: Printer configuration
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer
+print_label:
+  name: Print label
+  description: Automatically fit text and print one or more labels, connecting first when needed.
+  fields:
+    config_entry_id:
+      name: Printer configuration
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer
+    text:
+      name: Text
+      required: true
+      selector:
+        text:
+          multiline: true
+    copies:
+      name: Copies
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+save_favorite:
+  name: Save favorite
+  description: Save label text as a shortcut on the dashboard card.
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer
+    text:
+      required: true
+      selector:
+        text:
+delete_favorite:
+  name: Delete favorite
+  description: Remove a saved label shortcut.
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer
+    text:
+      required: true
+      selector:
+        text:

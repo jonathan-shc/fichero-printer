@@ -1,5 +1,7 @@
 # fichero-printer
 
+[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonathan-shc&repository=fichero-printer&category=integration)
+
 Web GUI, Python CLI, and protocol documentation for the Fichero D11s thermal label printer.
 
 Blog post: [Reverse Engineering Action's Cheap Fichero Labelprinter](https://blog.dbuglife.com/reverse-engineering-fichero-label-printer/)
@@ -129,6 +131,56 @@ asyncio.run(main())
 ```
 
 The package exports `PrinterClient`, `connect`, `PrinterError`, `PrinterNotFound`, `PrinterTimeout`, `PrinterNotReady`, and `PrinterStatus`.
+
+## Home Assistant integration
+
+This repository includes a local Home Assistant custom integration and a bundled
+dashboard card for the Fichero/D11s. It can:
+
+- press an existing SwitchBot entity before starting a printer session;
+- connect through Home Assistant's shared Bluetooth scanner (including a
+  connectable Bluetooth proxy), or use a configured Bluetooth address;
+- automatically wrap text and choose the largest font that fits the configured
+  label length and the 96-pixel printhead;
+- print 1–100 copies, print today's date as `dd-mm-yyyy`, and persist favorite
+  label shortcuts in Home Assistant;
+- show live powering-on, connecting, connected, printing, error, and disconnected
+  status; and explicitly connect or disconnect/power off.
+
+### Install with HACS
+
+Use the **Open in HACS** button above, or add
+`https://github.com/jonathan-shc/fichero-printer` as a custom repository with
+category **Integration**. Install **Fichero Label Printer**, restart Home
+Assistant, and add the integration under **Settings → Devices & services**.
+
+HACS installs releases when available and otherwise installs from this
+repository's default branch.
+
+### Manual install
+
+Copy `custom_components/fichero_printer` into the same directory under your Home
+Assistant configuration, then restart Home Assistant.
+
+In Home Assistant, go to **Settings → Devices & services → Add integration**, find
+**Fichero Label Printer**, and configure:
+
+1. The existing SwitchBot `switch`, `button`, or `input_button` entity which
+   physically presses the printer button.
+2. How long the printer needs after that press before Bluetooth is ready.
+3. The physical label length (30 mm by default), density, and whether disconnect
+   should press the SwitchBot again.
+4. Optionally, a fixed Bluetooth address. Leave it blank for name-based discovery
+   (`FICHERO…` or `D11s_…`) each time a session starts.
+
+Add the **Fichero Label Printer** card from the dashboard card picker. With one
+printer it discovers the status entity automatically. With multiple printers,
+select the desired status entity in the card editor. The card is served and
+registered by the integration, so no separate Lovelace resource is needed.
+
+> The configured SwitchBot action is treated as a momentary physical press. Make
+> sure its press duration is already correct in Home Assistant, as the integration
+> deliberately does not change the SwitchBot configuration.
 
 ## TODO
 
