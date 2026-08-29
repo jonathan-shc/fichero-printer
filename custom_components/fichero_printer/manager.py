@@ -83,13 +83,20 @@ class FicheroManager:
         """Keep the HA connection status synchronized with the printer."""
         while not self._monitor_stop.is_set():
             try:
-                if not self.connected:
+                if self.connected:
+                    if self.status != "connected":
+                        self._set_status("connected")
+                else:
+                    if self.status != "disconnected":
+                        self._set_status("disconnected")
+
+                    # Only try to connect when the printer is already
+                    # advertising. Never press the SwitchBot from the monitor.
                     target = self._visible_printer()
 
                     if target is not None:
                         async with self._operation_lock:
                             if not self.connected:
-                                self._set_status("connecting")
                                 try:
                                     await self._connect_to_printer(target)
                                 except Exception as err:
@@ -99,16 +106,22 @@ class FicheroManager:
                                         "Background printer connection failed: %s",
                                         err,
                                     )
-                elif self.status != "connected":
-                    self._set_status("connected")
 
             except asyncio.CancelledError:
                 raise
             except Exception as err:
-                _LOGGER.debug("Printer connection monitor error: %s", err)
+                self.client = None
+                self._set_status("disconnected", str(err))
+                _LOGGER.debug(
+                    "Printer connection monitor error: %s",
+                    err,
+                )
 
             try:
-                await asyncio.wait_for(self._monitor_stop.wait(), timeout=2)
+                await asyncio.wait_for(
+                    self._monitor_stop.wait(),
+                    timeout=2,
+                )
             except asyncio.TimeoutError:
                 pass
 
@@ -148,54 +161,31 @@ class FicheroManager:
         )
 
     async def async_connect(self) -> None:
-        """Connect to the printer, powering it on immediately if needed."""
-        async with self._operation_lock:
+        """Press SwitchBot directly."""
+        await self._press_switchbot()
+
+    async def _wake_and_wait_for_connection(self) -> None:
+        """Press SwitchBot and wait until the background monitor connects."""
+        if self.connected:
+            self._set_status("connected")
+            return
+
+        await self._press_switchbot()
+        self._set_status("disconnected")
+
+        deadline = asyncio.get_running_loop().time() + 30
+
+        while asyncio.get_running_loop().time() < deadline:
             if self.connected:
                 self._set_status("connected")
                 return
 
-            # An explicit connect request means: wake the printer immediately.
-            # Do not wait for BLE discovery before pressing the SwitchBot.
-            self._set_status("powering_on")
-            await self._press_switchbot()
+            await asyncio.sleep(0.5)
 
-            # The printer needs a moment to boot and start advertising.
-            # We do not use a fixed startup delay; instead we continuously
-            # check for the printer and connect as soon as it is available.
-            deadline = asyncio.get_running_loop().time() + 30
-
-            while asyncio.get_running_loop().time() < deadline:
-                try:
-                    self._set_status("connecting")
-
-                    target = self._visible_printer()
-
-                    if target is None:
-                        try:
-                            target = await self._resolve_printer(timeout=3)
-                        except Exception:
-                            target = None
-
-                    if target is not None:
-                        await self._connect_to_printer(target)
-                        return
-
-                except Exception as err:
-                    _LOGGER.debug(
-                        "Printer not ready after SwitchBot press: %s",
-                        err,
-                    )
-                    self.client = None
-
-                await asyncio.sleep(1)
-
-            self._set_status(
-                "error",
-                "Printer did not become reachable after SwitchBot press",
-            )
-            raise HomeAssistantError(
-                "Printer did not become reachable after SwitchBot press"
-            )
+        self._set_status("disconnected")
+        raise HomeAssistantError(
+            "Printer did not connect after SwitchBot press"
+        )
 
     async def _connect_to_printer(self, target) -> None:
         """Connect to the printer and establish notifications."""
@@ -230,17 +220,25 @@ class FicheroManager:
             if device := self._visible_printer():
                 return device
             await asyncio.sleep(0.5)
+
         target = address or "a device named FICHERO…/D11s_…"
         service_infos = bluetooth.async_discovered_service_info(
             self.hass, connectable=True
         )
-        nearby = [self._describe_advertisement(info) for info in list(service_infos)[:8]]
-        scanner_count = bluetooth.async_scanner_count(self.hass, connectable=True)
+        nearby = [
+            self._describe_advertisement(info)
+            for info in list(service_infos)[:8]
+        ]
+        scanner_count = bluetooth.async_scanner_count(
+            self.hass, connectable=True
+        )
         detail = f"{scanner_count} connectable Bluetooth scanner(s)"
+
         if nearby:
             detail += f"; nearby devices: {', '.join(nearby)}"
         else:
             detail += "; no connectable Bluetooth advertisements visible"
+
         raise HomeAssistantError(
             f"No connectable Fichero printer advertisement found for {target} "
             f"({detail})"
@@ -249,26 +247,37 @@ class FicheroManager:
     def _visible_printer(self):
         """Return a currently visible configured or name-matched printer."""
         address = self.entry.data.get(CONF_ADDRESS)
-        if address and (device := bluetooth.async_ble_device_from_address(
-            self.hass, address, connectable=True
-        )):
+
+        if address and (
+            device := bluetooth.async_ble_device_from_address(
+                self.hass, address, connectable=True
+            )
+        ):
             return device
+
         for service_info in bluetooth.async_discovered_service_info(
             self.hass, connectable=True
         ):
             device = service_info.device
+
             if address and device.address.lower() == address.lower():
                 return device
+
             name = service_info.name or device.name or ""
+
             if not address and name.lower().startswith(
                 tuple(prefix.lower() for prefix in NAME_PREFIXES)
             ):
                 return device
+
             advertised_services = {
-                uuid.lower() for uuid in (service_info.service_uuids or [])
+                uuid.lower()
+                for uuid in (service_info.service_uuids or [])
             }
+
             if not address and advertised_services & UART_SERVICE_UUIDS:
                 return device
+
         return None
 
     @staticmethod
@@ -292,15 +301,8 @@ class FicheroManager:
         self._response.set()
 
     async def async_disconnect(self, power_off: bool = True) -> None:
-        async with self._operation_lock:
-            self._set_status("disconnecting")
-            if self.client is not None:
-                client, self.client = self.client, None
-                if client.is_connected:
-                    await client.disconnect()
-            if power_off and self.entry.data[CONF_POWER_OFF_ON_DISCONNECT]:
-                await self._press_switchbot()
-            self._set_status("disconnected")
+        """Press SwitchBot directly."""
+        await self._press_switchbot()
 
     async def _send(self, data: bytes, wait: bool = False, timeout: float = 3) -> bytes:
         if not self.connected:
@@ -329,9 +331,11 @@ class FicheroManager:
         if not 1 <= copies <= 100:
             raise HomeAssistantError("Copies must be between 1 and 100")
         if not self.connected:
-            await self.async_connect()
+            await self._wake_and_wait_for_connection()
+
         async with self._operation_lock:
-            self._set_status("printing")
+            if not self.connected:
+                raise HomeAssistantError("Printer disconnected before printing")
             try:
                 label_rows = self.entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM
                 raster = render_text_raster(text, label_rows)
@@ -351,8 +355,8 @@ class FicheroManager:
                     await asyncio.sleep(0.3)
                     await self._send(bytes([0x10, 0xFF, 0xFE, 0x45]), True, 60)
                 self._set_status("connected")
-            except Exception as err:
-                self._set_status("error", str(err))
+            except Exception:
+                self._set_status("disconnected")
                 raise
 
     async def async_save_favorite(self, text: str) -> None:
