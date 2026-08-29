@@ -128,7 +128,7 @@ class FicheroManager:
         service_infos = bluetooth.async_discovered_service_info(
             self.hass, connectable=True
         )
-        nearby = [self._describe_advertisement(info) for info in service_infos[:8]]
+        nearby = [self._describe_advertisement(info) for info in list(service_infos)[:8]]
         scanner_count = bluetooth.async_scanner_count(self.hass, connectable=True)
         detail = f"{scanner_count} connectable Bluetooth scanner(s)"
         if nearby:
