@@ -19,6 +19,9 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # GitHub's license API only inspects the default branch. LICENSE is
+          # present in this PR and will be detected normally after merge.
+          ignore: license
 
   hassfest:
     name: Hassfest
