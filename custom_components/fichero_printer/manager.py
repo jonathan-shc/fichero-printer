@@ -7,6 +7,7 @@ from collections.abc import Callable
 import logging
 
 from bleak import BleakClient
+from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
@@ -189,13 +190,16 @@ class FicheroManager:
 
     async def _connect_to_printer(self, target) -> None:
         """Connect to the printer and establish notifications."""
-        client = BleakClient(
-            target,
-            disconnected_callback=self._on_disconnect,
-        )
+        client: BleakClient | None = None
 
         try:
-            await client.connect(timeout=15)
+            client = await establish_connection(
+                BleakClientWithServiceCache,
+                target,
+                target.name or target.address,
+                disconnected_callback=self._on_disconnect,
+                max_attempts=3,
+            )
             await client.start_notify(NOTIFY_UUID, self._on_notify)
 
             self.client = client
@@ -205,7 +209,7 @@ class FicheroManager:
 
         except Exception:
             try:
-                if client.is_connected:
+                if client is not None and client.is_connected:
                     await client.disconnect()
             except Exception:
                 pass
