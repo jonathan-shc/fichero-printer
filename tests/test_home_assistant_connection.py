@@ -298,3 +298,30 @@ def test_monitor_does_not_join_startup_tasks_and_stops_on_unload(session):
             await asyncio.gather(*startup_tasks, *background_tasks, return_exceptions=True)
 
     asyncio.run(run())
+
+
+def test_delete_favorite_by_card_index(session):
+    manager, _ = session
+    manager.favorites = ["Kitchen", "Garage", "Office"]
+    manager._store = SimpleNamespace(async_save=AsyncMock())
+    listener = Mock()
+    manager.add_listener(listener)
+
+    asyncio.run(manager.async_delete_favorite(index=1))
+
+    assert manager.favorites == ["Kitchen", "Office"]
+    manager._store.async_save.assert_awaited_once_with(
+        {"favorites": ["Kitchen", "Office"]}
+    )
+    listener.assert_called_once()
+
+
+def test_delete_missing_favorite_reports_error(manager_module, session):
+    manager, _ = session
+    manager.favorites = ["Kitchen"]
+    manager._store = SimpleNamespace(async_save=AsyncMock())
+
+    with pytest.raises(manager_module.HomeAssistantError, match="no longer exists"):
+        asyncio.run(manager.async_delete_favorite(index=4))
+
+    manager._store.async_save.assert_not_awaited()

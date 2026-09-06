@@ -428,8 +428,17 @@ class FicheroManager:
             await self._store.async_save({"favorites": self.favorites})
             self._notify()
 
-    async def async_delete_favorite(self, text: str) -> None:
-        if text in self.favorites:
+    async def async_delete_favorite(
+        self, text: str | None = None, index: int | None = None
+    ) -> None:
+        """Delete a favorite by stable card index or legacy text value."""
+        if index is not None:
+            if index >= len(self.favorites):
+                raise HomeAssistantError("Favorite no longer exists")
+            self.favorites.pop(index)
+        elif text is not None and text in self.favorites:
             self.favorites.remove(text)
-            await self._store.async_save({"favorites": self.favorites})
-            self._notify()
+        else:
+            raise HomeAssistantError("Favorite no longer exists")
+        await self._store.async_save({"favorites": self.favorites})
+        self._notify()

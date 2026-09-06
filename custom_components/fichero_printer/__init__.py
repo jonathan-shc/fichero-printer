@@ -30,7 +30,13 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
     {vol.Required("text"): cv.string, vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100))}
 )
-SERVICE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
+SERVICE_SAVE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
+SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
+    {
+        vol.Exclusive("text", "favorite"): cv.string,
+        vol.Exclusive("index", "favorite"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    }
+)
 
 
 async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
@@ -60,13 +66,15 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
         await manager_for(call).async_save_favorite(call.data["text"])
 
     async def handle_delete(call: ServiceCall) -> None:
-        await manager_for(call).async_delete_favorite(call.data["text"])
+        await manager_for(call).async_delete_favorite(
+            text=call.data.get("text"), index=call.data.get("index")
+        )
 
     hass.services.async_register(DOMAIN, SERVICE_CONNECT, handle_connect, schema=SERVICE_ENTRY_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_DISCONNECT, handle_disconnect, schema=SERVICE_ENTRY_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_PRINT, handle_print, schema=SERVICE_PRINT_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_SAVE_FAVORITE, handle_save, schema=SERVICE_FAVORITE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_DELETE_FAVORITE, handle_delete, schema=SERVICE_FAVORITE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_SAVE_FAVORITE, handle_save, schema=SERVICE_SAVE_FAVORITE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_DELETE_FAVORITE, handle_delete, schema=SERVICE_DELETE_FAVORITE_SCHEMA)
     return True
 
 

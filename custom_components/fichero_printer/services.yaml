@@ -64,7 +64,17 @@ delete_favorite:
       selector:
         config_entry:
           integration: fichero_printer
+    index:
+      name: Favorite position
+      description: Zero-based position used by the dashboard card.
+      required: false
+      selector:
+        number:
+          min: 0
+          mode: box
     text:
-      required: true
+      name: Favorite text
+      description: Text value retained for existing automations.
+      required: false
       selector:
         text:
