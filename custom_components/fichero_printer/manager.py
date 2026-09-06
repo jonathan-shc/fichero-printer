@@ -52,6 +52,7 @@ class FicheroManager:
         self._buffer = bytearray()
         self._response = asyncio.Event()
         self._operation_lock = asyncio.Lock()
+        self._wake_lock = asyncio.Lock()
         self._listeners: set[Callable[[], None]] = set()
         self._store = Store(hass, 1, f"fichero_printer.{entry.entry_id}")
         self.favorites: list[str] = []
@@ -171,17 +172,22 @@ class FicheroManager:
         await self._wake_and_wait_for_connection()
 
     async def _wake_and_wait_for_connection(self) -> None:
-        """Serialize wake-up and connection with printing and the monitor."""
-        async with self._operation_lock:
+        """Wake immediately, then serialize the Bluetooth connection work."""
+        async with self._wake_lock:
             if self.connected:
                 return
             try:
+                # Do this before waiting for the Bluetooth operation lock. The
+                # background monitor can hold that lock for several seconds.
                 self._set_status("powering_on")
                 await self._press_switchbot()
                 await asyncio.sleep(self.entry.data.get(CONF_STARTUP_DELAY, DEFAULT_STARTUP_DELAY))
-                self._set_status("connecting")
-                target = await self._resolve_printer(timeout=30)
-                await self._connect_to_printer(target)
+                async with self._operation_lock:
+                    if self.connected:
+                        return
+                    self._set_status("connecting")
+                    target = await self._resolve_printer(timeout=30)
+                    await self._connect_to_printer(target)
             except Exception as err:
                 self._set_status("disconnected", str(err))
                 raise HomeAssistantError(f"Could not connect to the printer: {err}") from err

@@ -180,6 +180,50 @@ def test_wake_failure_preserves_bluez_error(manager_module, session):
     manager._press_switchbot.assert_awaited_once()
 
 
+def test_switchbot_press_does_not_wait_for_background_connection_lock(session):
+    manager, _ = session
+    manager.entry.data = {"startup_delay": 0}
+
+    async def run():
+        await manager._operation_lock.acquire()
+        task = asyncio.create_task(manager.async_connect())
+        try:
+            # The service call must happen while the background operation still
+            # owns the Bluetooth lock.
+            for _ in range(10):
+                if manager._press_switchbot.await_count:
+                    break
+                await asyncio.sleep(0)
+            manager._press_switchbot.assert_awaited_once()
+            assert manager._operation_lock.locked()
+            assert not task.done()
+        finally:
+            manager._operation_lock.release()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(run())
+
+
+def test_concurrent_wake_requests_only_press_once(session):
+    manager, _ = session
+    manager.entry.data = {"startup_delay": 0}
+    connected = asyncio.Event()
+
+    async def connect(_target):
+        manager.client = SimpleNamespace(is_connected=True)
+        connected.set()
+
+    async def run():
+        manager._resolve_printer = AsyncMock(return_value=object())
+        manager._connect_to_printer = connect
+        await asyncio.gather(manager.async_connect(), manager.async_connect())
+        await connected.wait()
+
+    asyncio.run(run())
+    manager._press_switchbot.assert_awaited_once()
+
+
 @pytest.mark.parametrize("fails", [False, True])
 def test_bluez_sets_only_target_preferred_bearer(manager_module, monkeypatch, fails):
     import dbus_fast
