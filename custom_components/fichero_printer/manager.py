@@ -424,7 +424,10 @@ class FicheroManager:
         if not text:
             raise HomeAssistantError("Favorite text cannot be empty")
         if text not in self.favorites:
-            self.favorites.append(text)
+            # Replace the list so HA's state machine can detect that the sensor
+            # attributes changed. Mutating it in place also changed the list in
+            # the previously published state and suppressed dashboard updates.
+            self.favorites = [*self.favorites, text]
             await self._store.async_save({"favorites": self.favorites})
             self._notify()
 
@@ -432,13 +435,15 @@ class FicheroManager:
         self, text: str | None = None, index: int | None = None
     ) -> None:
         """Delete a favorite by stable card index or legacy text value."""
+        favorites = list(self.favorites)
         if index is not None:
-            if index >= len(self.favorites):
+            if index >= len(favorites):
                 raise HomeAssistantError("Favorite no longer exists")
-            self.favorites.pop(index)
-        elif text is not None and text in self.favorites:
-            self.favorites.remove(text)
+            favorites.pop(index)
+        elif text is not None and text in favorites:
+            favorites.remove(text)
         else:
             raise HomeAssistantError("Favorite no longer exists")
+        self.favorites = favorites
         await self._store.async_save({"favorites": self.favorites})
         self._notify()
