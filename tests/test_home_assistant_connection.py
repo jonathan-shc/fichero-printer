@@ -205,3 +205,47 @@ def test_bluez_never_changes_local_host_for_proxy(manager_module, monkeypatch):
     device = SimpleNamespace(address="AA:BB:CC:DD:EE:FF", details={"source": "esphome-proxy"})
     assert asyncio.run(bluez.prefer_le(device)) is False
     factory.assert_not_called()
+
+
+def test_monitor_does_not_join_startup_tasks_and_stops_on_unload(session):
+    manager, _ = session
+
+    async def run():
+        started = asyncio.Event()
+        startup_tasks = []
+        background_tasks = []
+
+        async def monitor():
+            started.set()
+            await asyncio.Event().wait()
+
+        def create_startup_task(coro, *args):
+            task = asyncio.create_task(coro)
+            startup_tasks.append(task)
+            return task
+
+        def create_background_task(hass, coro, name):
+            assert hass is manager.hass
+            task = asyncio.create_task(coro, name=name)
+            background_tasks.append(task)
+            return task
+
+        manager.hass.async_create_task = create_startup_task
+        manager.entry.async_create_background_task = create_background_task
+        manager._connection_monitor = monitor
+        try:
+            await manager.async_start()
+            await asyncio.wait_for(started.wait(), 1)
+            # A permanent monitor must not be awaited by HA's startup barrier.
+            assert not startup_tasks
+            await manager.async_start()
+            assert len(background_tasks) == 1
+            await manager.async_stop()
+            assert background_tasks[0].cancelled()
+            assert manager._monitor_task is None
+        finally:
+            for task in startup_tasks + background_tasks:
+                task.cancel()
+            await asyncio.gather(*startup_tasks, *background_tasks, return_exceptions=True)
+
+    asyncio.run(run())

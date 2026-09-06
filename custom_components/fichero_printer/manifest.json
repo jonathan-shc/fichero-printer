@@ -18,7 +18,7 @@
     "bleak>=0.22.0",
     "Pillow>=10.0.0",
     "bleak-retry-connector>=3.0",
-    "dbus-fast>=2.0.0; sys_platform == 'linux'"
+    "dbus-fast>=2.0.0;sys_platform=='linux'"
   ],
-  "version": "0.1.4"
+  "version": "0.1.5"
 }

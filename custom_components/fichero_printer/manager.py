@@ -68,8 +68,10 @@ class FicheroManager:
         """Start permanently monitoring the printer connection."""
         if self._monitor_task is None or self._monitor_task.done():
             self._monitor_stop.clear()
-            self._monitor_task = self.hass.async_create_task(
-                self._connection_monitor()
+            self._monitor_task = self.entry.async_create_background_task(
+                self.hass,
+                self._connection_monitor(),
+                "Fichero printer connection monitor",
             )
 
     async def async_stop(self) -> None:
