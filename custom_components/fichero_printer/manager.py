@@ -217,7 +217,11 @@ class FicheroManager:
                 _LOGGER.debug("Fichero printer connected: %s", device)
                 return
             except (BleakError, KeyError) as err:
-                if "org.bluez.Error.BREDR.ProfileUnavailable" in str(err):
+                if any(reason in str(err) for reason in (
+                    "org.bluez.Error.BREDR.ProfileUnavailable",
+                    "br-connection-profile-unavailable",
+                    "br-connection-not-supported",
+                )):
                     if attempt or not await prefer_le(device):
                         raise HomeAssistantError(
                             f"BlueZ selected Bluetooth Classic for {target.address}, but this "

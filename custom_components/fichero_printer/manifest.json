@@ -20,5 +20,5 @@
     "bleak-retry-connector>=3.0",
     "dbus-fast>=2.0.0;sys_platform=='linux'"
   ],
-  "version": "0.1.5"
+  "version": "0.1.6"
 }

@@ -126,10 +126,15 @@ def test_success_does_not_clear_cache_or_disconnect(manager_module, session):
     assert manager.connected
 
 
+@pytest.mark.parametrize("reason", [
+    ("org.bluez.Error.BREDR.ProfileUnavailable", "No more profiles to connect to"),
+    ("org.bluez.Error.Failed", "br-connection-not-supported"),
+    ("org.bluez.Error.Failed", "br-connection-profile-unavailable"),
+])
 @pytest.mark.parametrize("wrapped", [False, True])
-def test_bredr_failure_selects_le_and_retries(manager_module, session, wrapped):
+def test_bredr_failure_selects_le_and_retries(manager_module, session, wrapped, reason):
     manager, target = session
-    error = manager_module.BleakDBusError("org.bluez.Error.BREDR.ProfileUnavailable", ["No more profiles to connect to"])
+    error = manager_module.BleakDBusError(reason[0], [reason[1]])
     if wrapped:
         error = manager_module.BleakError(f"Connection failed: {error}")
     connection = client()
