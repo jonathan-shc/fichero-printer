@@ -7,6 +7,7 @@ from collections.abc import Callable
 import logging
 
 from bleak import BleakClient
+from bleak.exc import BleakCharacteristicNotFoundError, BleakDBusError, BleakError
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 
 from homeassistant.components import bluetooth
@@ -14,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 
+from .bluez import prefer_le
 from .const import (
     CONF_ADDRESS,
     CONF_DENSITY,
@@ -21,6 +23,7 @@ from .const import (
     CONF_POWER_OFF_ON_DISCONNECT,
     CONF_STARTUP_DELAY,
     CONF_SWITCHBOT_ENTITY,
+    DEFAULT_STARTUP_DELAY,
 )
 from .render import render_text_raster
 
@@ -87,7 +90,7 @@ class FicheroManager:
                 if self.connected:
                     if self.status != "connected":
                         self._set_status("connected")
-                else:
+                elif not self._operation_lock.locked():
                     if self.status != "disconnected":
                         self._set_status("disconnected")
 
@@ -162,63 +165,91 @@ class FicheroManager:
         )
 
     async def async_connect(self) -> None:
-        """Press SwitchBot directly."""
-        await self._press_switchbot()
+        """Wake the printer once and establish a usable BLE session."""
+        await self._wake_and_wait_for_connection()
 
     async def _wake_and_wait_for_connection(self) -> None:
-        """Press SwitchBot and wait until the background monitor connects."""
-        if self.connected:
-            self._set_status("connected")
-            return
-
-        await self._press_switchbot()
-        self._set_status("disconnected")
-
-        deadline = asyncio.get_running_loop().time() + 30
-
-        while asyncio.get_running_loop().time() < deadline:
+        """Serialize wake-up and connection with printing and the monitor."""
+        async with self._operation_lock:
             if self.connected:
-                self._set_status("connected")
                 return
-
-            await asyncio.sleep(0.5)
-
-        self._set_status("disconnected")
-        raise HomeAssistantError(
-            "Printer did not connect after SwitchBot press"
-        )
+            try:
+                self._set_status("powering_on")
+                await self._press_switchbot()
+                await asyncio.sleep(self.entry.data.get(CONF_STARTUP_DELAY, DEFAULT_STARTUP_DELAY))
+                self._set_status("connecting")
+                target = await self._resolve_printer(timeout=30)
+                await self._connect_to_printer(target)
+            except Exception as err:
+                self._set_status("disconnected", str(err))
+                raise HomeAssistantError(f"Could not connect to the printer: {err}") from err
 
     async def _connect_to_printer(self, target) -> None:
         """Connect to the printer and establish notifications."""
-        client: BleakClient | None = None
-
-        try:
-            client = await establish_connection(
-                BleakClientWithServiceCache,
-                target,
-                target.name or target.address,
-                disconnected_callback=self._on_disconnect,
-                max_attempts=3,
-            )
-            await client.start_notify(NOTIFY_UUID, self._on_notify)
-
-            self.client = client
-            self._set_status("connected")
-
-            _LOGGER.debug("Fichero printer connected: %s", target)
-
-        except Exception:
+        for attempt in range(2):
+            client = None
+            ready = False
             try:
-                if client is not None and client.is_connected:
-                    await client.disconnect()
-            except Exception:
-                pass
-            raise
+                # Resolve the same address again after cache recovery: HA may
+                # now route it through another adapter or Bluetooth proxy.
+                device = bluetooth.async_ble_device_from_address(
+                    self.hass, target.address, connectable=True
+                ) or target
+                client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    device,
+                    device.name or device.address,
+                    disconnected_callback=self._on_disconnect,
+                    max_attempts=3,
+                    use_services_cache=attempt == 0,
+                )
+                for uuid in (WRITE_UUID, NOTIFY_UUID):
+                    if client.services.get_characteristic(uuid) is None:
+                        raise BleakCharacteristicNotFoundError(uuid)
+                await client.start_notify(NOTIFY_UUID, self._on_notify)
+                if not client.is_connected:
+                    raise HomeAssistantError("Printer disconnected during notification setup")
+                self.client = client
+                ready = True
+                self._set_status("connected")
+                _LOGGER.debug("Fichero printer connected: %s", device)
+                return
+            except (BleakError, KeyError) as err:
+                if "org.bluez.Error.BREDR.ProfileUnavailable" in str(err):
+                    if attempt or not await prefer_le(device):
+                        raise HomeAssistantError(
+                            f"BlueZ selected Bluetooth Classic for {target.address}, but this "
+                            "integration requires BLE. Set the printer's PreferredBearer to le "
+                            "on the Bluetooth host, or use a connectable ESPHome BLE proxy. "
+                            f"Original error: {err}"
+                        ) from err
+                    continue
+                if not isinstance(err, (BleakCharacteristicNotFoundError, BleakDBusError, KeyError)):
+                    raise
+                if isinstance(err, BleakDBusError) and err.dbus_error not in {
+                    "org.freedesktop.DBus.Error.UnknownObject",
+                    "org.freedesktop.DBus.Error.UnknownMethod",
+                }:
+                    raise
+                if attempt or client is None:
+                    raise HomeAssistantError(
+                        f"Printer GATT services unavailable for {target.address}: {err}"
+                    ) from err
+                _LOGGER.debug("Refreshing printer GATT cache for %s: %s", target.address, err)
+                await client.clear_cache()
+            finally:
+                # Also release the connection when HA cancels setup on unload.
+                if client is not None and not ready:
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        _LOGGER.debug("Failed to release printer connection", exc_info=True)
 
     async def _resolve_printer(self, timeout: float = 12):
         """Wait for HA discovery, including advertisements from BLE proxies."""
         address = self.entry.data.get(CONF_ADDRESS)
-        await bluetooth.async_request_active_scan(self.hass)
+        if request_scan := getattr(bluetooth, "async_request_active_scan", None):
+            await request_scan(self.hass)
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             if device := self._visible_printer():
@@ -297,6 +328,8 @@ class FicheroManager:
         return f"{name} [{address}{suffix}]"
 
     def _on_disconnect(self, _client) -> None:
+        if _client is not self.client:
+            return
         self.client = None
         self._set_status("disconnected")
 
@@ -306,6 +339,17 @@ class FicheroManager:
 
     async def async_disconnect(self, power_off: bool = True) -> None:
         """Press SwitchBot directly."""
+        if not power_off:
+            # Unloading must release BlueZ/proxy resources without pressing
+            # the physical power button (which could turn the printer on).
+            async with self._operation_lock:
+                client, self.client = self.client, None
+                try:
+                    if client is not None:
+                        await client.disconnect()
+                finally:
+                    self._set_status("disconnected")
+            return
         await self._press_switchbot()
 
     async def _send(self, data: bytes, wait: bool = False, timeout: float = 3) -> bytes:

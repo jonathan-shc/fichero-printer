@@ -182,6 +182,34 @@ registered by the integration, so no separate Lovelace resource is needed.
 > sure its press duration is already correct in Home Assistant, as the integration
 > deliberately does not change the SwitchBot configuration.
 
+### Bluetooth connection troubleshooting
+
+After a SwitchBot press, the integration waits for the configured startup delay,
+then discovers and connects to the printer directly. Connection failures retain
+their original diagnostic details instead of a generic wake-up timeout.
+
+For `org.bluez.Error.BREDR.ProfileUnavailable`, BlueZ has selected Bluetooth Classic
+instead of BLE. The integration tries setting `org.bluez.Device1.PreferredBearer`
+to `le` for this printer on a local adapter and retries once. This optional,
+experimental BlueZ property may not be available on every host. If unavailable,
+the error explains the required host configuration or BLE proxy alternative.
+See the [BlueZ Device API](https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst).
+
+The Home Assistant integration validates both printer GATT characteristics before
+reporting a connection. Missing characteristics or stale D-Bus object paths trigger
+one cache refresh and reconnection with fresh service discovery. Failed or cancelled
+notification setup releases the connection, as does unloading the integration.
+
+If connection problems persist, enable debug logging for
+`custom_components.fichero_printer` and `bleak_retry_connector`, reproduce the
+failure, and include the exception, Home Assistant version, and whether you use a
+local adapter or an ESPHome proxy in your report. Keep other printer apps disconnected
+while testing. This recovery does not reset the host Bluetooth adapter or remove
+the printer's pairing from BlueZ.
+
+Run the regression suite with `python -m pip install -e . pytest pytest-asyncio
+bleak-retry-connector dbus-fast` followed by `python -m pytest -q`.
+
 ## TODO
 
 - [ ] Emoji support in text labels. The default Pillow font has no emoji glyphs, so they render as squares. Needs two-pass rendering: split text into emoji/non-emoji segments, render emoji with Apple Color Emoji (macOS) or Noto Color Emoji (Linux) using `embedded_color=True`, then composite onto the label.
