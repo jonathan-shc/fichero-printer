@@ -4,6 +4,7 @@ class FicheroPrinterCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._text = "";
     this._copies = 1;
+    this._multiline = false;
     this._busy = false;
     this._hiddenFavorites = new Set();
     this._lastSignature = null;
@@ -116,6 +117,7 @@ class FicheroPrinterCard extends HTMLElement {
         <textarea id="text" maxlength="500" placeholder="Text for your label">${this._escape(this._text)}</textarea>
         <div class="row">
           <label>Labels <input id="copies" type="number" min="1" max="100" value="${this._copies}"></label>
+          <label title="Keep line breaks as typed"><input id="multiline" type="checkbox" ${this._multiline ? "checked" : ""}> Multiline</label>
           <button class="primary" id="print" ${disabled}>Print</button>
           <button class="date" id="today" ${disabled}>📅 Print ${today}</button>
           <button id="favorite" ${disabled}>☆ Save favorite</button>
@@ -129,15 +131,16 @@ class FicheroPrinterCard extends HTMLElement {
     const copies = this.shadowRoot.getElementById("copies");
     text.addEventListener("input", (event) => { this._text = event.target.value; });
     copies.addEventListener("input", (event) => { this._copies = Math.max(1, Math.min(100, Number(event.target.value) || 1)); });
+    this.shadowRoot.getElementById("multiline").addEventListener("change", (event) => { this._multiline = event.target.checked; });
     this.shadowRoot.getElementById("connection").onclick = () => this._call(connected ? "disconnect" : "connect");
-    this.shadowRoot.getElementById("print").onclick = () => this._call("print_label", { text: this._text, copies: this._copies });
+    this.shadowRoot.getElementById("print").onclick = () => this._call("print_label", { text: this._text, copies: this._copies, multiline: this._multiline });
     this.shadowRoot.getElementById("favorite").onclick = () => this._call("save_favorite", { text: this._text });
     this.shadowRoot.getElementById("today").onclick = () => {
       this._text = today;
-      this._call("print_label", { text: today, copies: this._copies });
+      this._call("print_label", { text: today, copies: this._copies, multiline: this._multiline });
     };
     this.shadowRoot.querySelectorAll(".favorite-print").forEach((button) => {
-      button.onclick = () => this._call("print_label", { text: storedFavorites[Number(button.dataset.index)], copies: this._copies });
+      button.onclick = () => this._call("print_label", { text: storedFavorites[Number(button.dataset.index)], copies: this._copies, multiline: this._multiline });
     });
     this.shadowRoot.querySelectorAll(".remove").forEach((button) => {
       button.onclick = async (event) => {

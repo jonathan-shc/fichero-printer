@@ -28,7 +28,11 @@ from .manager import FicheroManager
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 SERVICE_PRINT_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
-    {vol.Required("text"): cv.string, vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100))}
+    {
+        vol.Required("text"): cv.string,
+        vol.Optional("copies", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+        vol.Optional("multiline", default=False): cv.boolean,
+    }
 )
 SERVICE_SAVE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend({vol.Required("text"): cv.string})
 SERVICE_DELETE_FAVORITE_SCHEMA = SERVICE_ENTRY_SCHEMA.extend(
@@ -47,7 +51,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     )
     # The query string changes with releases so dashboards cannot keep serving
     # an older card script from the browser cache after a HACS update.
-    add_extra_js_url(hass, f"{CARD_URL}?v=0.1.11")
+    add_extra_js_url(hass, f"{CARD_URL}?v=0.1.12")
 
     def manager_for(call: ServiceCall) -> FicheroManager:
         entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])
@@ -62,7 +66,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
         await manager_for(call).async_disconnect()
 
     async def handle_print(call: ServiceCall) -> None:
-        await manager_for(call).async_print(call.data["text"], call.data["copies"])
+        await manager_for(call).async_print(call.data["text"], call.data["copies"], call.data["multiline"])
 
     async def handle_save(call: ServiceCall) -> None:
         await manager_for(call).async_save_favorite(call.data["text"])

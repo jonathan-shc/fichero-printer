@@ -42,6 +42,12 @@ print_label:
           min: 1
           max: 100
           mode: box
+    multiline:
+      name: Multiline
+      description: Keep typed line breaks and print each line on its own row, wrapping only lines that would get too small.
+      default: false
+      selector:
+        boolean:
 save_favorite:
   name: Save favorite
   description: Save label text as a shortcut on the dashboard card.

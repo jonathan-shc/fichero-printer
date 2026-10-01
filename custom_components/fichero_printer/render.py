@@ -9,33 +9,84 @@ PRINTHEAD_PX = 96
 EDGE_MARGIN_PX = 16
 
 
-def render_text_raster(text: str, label_rows: int) -> bytes:
-    """Fit text on one line at the largest possible size."""
-    # Treat pasted line breaks and repeated whitespace as ordinary spaces. A
-    # label should only become smaller horizontally, never wrap vertically.
-    text = " ".join(text.split())
-    if not text:
+# Smallest font a typed line may shrink to in multiline mode before it is
+# wrapped on spaces instead.
+MIN_MULTILINE_PX = 16
+LINE_SPACING_PX = 2
+
+
+def _wrap_line(draw, line, font, max_width):
+    """Greedily wrap one line on spaces; over-long single words stay whole."""
+    lines: list[str] = []
+    current = ""
+    for word in line.split():
+        candidate = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _fit_lines(draw, lines, label_rows, min_size, wrap):
+    """Return the largest (font, lines, bboxes) that fits, or None."""
+    max_width = label_rows - 2 * EDGE_MARGIN_PX
+    max_height = PRINTHEAD_PX - 4
+    best = None
+    low, high = min_size, min(96, label_rows)
+    while low <= high:
+        size = (low + high) // 2
+        font = ImageFont.load_default(size=size)
+        fitted = [w for line in lines for w in (_wrap_line(draw, line, font, max_width) if wrap else [line])]
+        bboxes = [draw.textbbox((0, 0), line, font=font) for line in fitted]
+        total = sum(b[3] - b[1] for b in bboxes) + LINE_SPACING_PX * (len(fitted) - 1)
+        if all(b[2] - b[0] <= max_width for b in bboxes) and total <= max_height:
+            best = (font, fitted, bboxes)
+            low = size + 1
+        else:
+            high = size - 1
+    return best
+
+
+def render_text_raster(text: str, label_rows: int, multiline: bool = False) -> bytes:
+    """Fit text at the largest possible size.
+
+    By default everything is one line: line breaks become spaces so a label
+    only shrinks horizontally. With ``multiline`` typed line breaks are kept
+    and a line is only wrapped on spaces if it would otherwise get too small.
+    """
+    if multiline:
+        lines = [" ".join(line.split()) for line in text.splitlines()]
+        lines = [line for line in lines if line]
+    else:
+        lines = [" ".join(text.split())]
+        lines = [line for line in lines if line]
+    if not lines:
         raise ValueError("Text cannot be empty")
 
     canvas = Image.new("1", (label_rows, PRINTHEAD_PX), 1)
     draw = ImageDraw.Draw(canvas)
     best = None
-    low, high = 6, min(96, label_rows)
-    while low <= high:
-        size = (low + high) // 2
-        font = ImageFont.load_default(size=size)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        if bbox[2] - bbox[0] <= label_rows - 2 * EDGE_MARGIN_PX and bbox[3] - bbox[1] <= PRINTHEAD_PX - 4:
-            best = (font, bbox)
-            low = size + 1
-        else:
-            high = size - 1
+    if multiline:
+        best = _fit_lines(draw, lines, label_rows, MIN_MULTILINE_PX, wrap=False)
+        if best is None:
+            best = _fit_lines(draw, lines, label_rows, 6, wrap=True)
+    else:
+        best = _fit_lines(draw, lines, label_rows, 6, wrap=False)
     if best is None:
         raise ValueError("Text cannot fit on this label")
-    font, bbox = best
-    x = max(EDGE_MARGIN_PX, (label_rows - (bbox[2] - bbox[0])) // 2) - bbox[0]
-    y = (PRINTHEAD_PX - (bbox[3] - bbox[1])) // 2 - bbox[1]
-    draw.text((x, y), text, font=font, fill=0)
+
+    font, fitted, bboxes = best
+    total = sum(b[3] - b[1] for b in bboxes) + LINE_SPACING_PX * (len(fitted) - 1)
+    top = (PRINTHEAD_PX - total) // 2
+    for line, bbox in zip(fitted, bboxes):
+        x = max(EDGE_MARGIN_PX, (label_rows - (bbox[2] - bbox[0])) // 2) - bbox[0]
+        draw.text((x, top - bbox[1]), line, font=font, fill=0)
+        top += bbox[3] - bbox[1] + LINE_SPACING_PX
     # Printer raster is 96 pixels wide and one row per dot along label length.
     rotated = canvas.rotate(90, expand=True)
     return bytes(byte ^ 0xFF for byte in rotated.tobytes())

@@ -56,3 +56,51 @@ def test_text_keeps_clear_of_label_ends():
     inked = [i for i, row in enumerate(rows) if any(row)]
     assert inked[0] >= render.EDGE_MARGIN_PX
     assert inked[-1] <= 240 - 1 - render.EDGE_MARGIN_PX
+
+
+def _inked_rows(raster, label_rows=240):
+    rows = [raster[i * 12:(i + 1) * 12] for i in range(label_rows)]
+    return [i for i, row in enumerate(rows) if any(row)]
+
+
+def _ink_columns(raster, label_rows=240):
+    """Printhead positions (0-95) that carry ink, across the whole label."""
+    cols = set()
+    for i in range(label_rows):
+        row = int.from_bytes(raster[i * 12:(i + 1) * 12], "big")
+        for bit in range(96):
+            if row >> (95 - bit) & 1:
+                cols.add(bit)
+    return cols
+
+
+def test_default_ignores_line_breaks():
+    assert render.render_text_raster("Basilicum\n2026-09", 240) == render.render_text_raster("Basilicum 2026-09", 240)
+
+
+def test_multiline_keeps_typed_breaks_and_is_larger():
+    single = render.render_text_raster("Basilicum 2026-09", 240)
+    multi = render.render_text_raster("Basilicum\n2026-09", 240, multiline=True)
+    assert len(multi) == 240 * 12
+    assert multi != single
+    # Two stacked lines use more of the printhead height than one small line.
+    assert len(_ink_columns(multi)) > len(_ink_columns(single))
+
+
+def test_multiline_keeps_clear_of_label_ends():
+    raster = render.render_text_raster("A considerably longer\nlabel name", 240, multiline=True)
+    inked = _inked_rows(raster)
+    assert inked[0] >= render.EDGE_MARGIN_PX
+    assert inked[-1] <= 240 - 1 - render.EDGE_MARGIN_PX
+
+
+def test_multiline_wraps_only_when_line_would_be_tiny():
+    long_line = "one very long typed line that cannot stay readable on a single row"
+    raster = render.render_text_raster(long_line, 240, multiline=True)
+    assert len(raster) == 240 * 12 and any(raster)
+
+
+def test_multiline_empty_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        render.render_text_raster("\n  \n", 240, multiline=True)
