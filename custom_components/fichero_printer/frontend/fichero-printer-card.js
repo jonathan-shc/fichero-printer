@@ -6,6 +6,7 @@ class FicheroPrinterCard extends HTMLElement {
     this._copies = 1;
     this._busy = false;
     this._hiddenFavorites = new Set();
+    this._lastSignature = null;
   }
 
   static getStubConfig() { return {}; }
@@ -23,6 +24,15 @@ class FicheroPrinterCard extends HTMLElement {
     this._entityId = configured || Object.keys(hass.states).find((id) =>
       id.startsWith("sensor.") && hass.states[id].attributes.config_entry_id
     );
+    // Home Assistant pushes a new hass object on any entity change house-wide.
+    // Re-rendering unconditionally recreates the textarea and drops keyboard
+    // focus mid-typing, so only re-render when displayed values change.
+    const state = this._entityId && hass.states[this._entityId];
+    const signature = state
+      ? JSON.stringify([state.state, state.attributes.connected, state.attributes.favorites, state.attributes.last_error])
+      : null;
+    if (signature === this._lastSignature && this.shadowRoot.firstChild) return;
+    this._lastSignature = signature;
     this._render();
   }
 

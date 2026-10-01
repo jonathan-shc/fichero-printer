@@ -3,6 +3,10 @@
 from PIL import Image, ImageDraw, ImageFont
 
 PRINTHEAD_PX = 96
+# Blank dots kept clear at both ends of the label (8 dots = 1 mm). Paper
+# position varies by about 1 mm between labels, so a smaller margin can print
+# the first character before the label starts.
+EDGE_MARGIN_PX = 16
 
 
 def render_text_raster(text: str, label_rows: int) -> bytes:
@@ -21,7 +25,7 @@ def render_text_raster(text: str, label_rows: int) -> bytes:
         size = (low + high) // 2
         font = ImageFont.load_default(size=size)
         bbox = draw.textbbox((0, 0), text, font=font)
-        if bbox[2] - bbox[0] <= label_rows - 4 and bbox[3] - bbox[1] <= PRINTHEAD_PX - 4:
+        if bbox[2] - bbox[0] <= label_rows - 2 * EDGE_MARGIN_PX and bbox[3] - bbox[1] <= PRINTHEAD_PX - 4:
             best = (font, bbox)
             low = size + 1
         else:
@@ -29,7 +33,7 @@ def render_text_raster(text: str, label_rows: int) -> bytes:
     if best is None:
         raise ValueError("Text cannot fit on this label")
     font, bbox = best
-    x = (label_rows - (bbox[2] - bbox[0])) // 2 - bbox[0]
+    x = max(EDGE_MARGIN_PX, (label_rows - (bbox[2] - bbox[0])) // 2) - bbox[0]
     y = (PRINTHEAD_PX - (bbox[3] - bbox[1])) // 2 - bbox[1]
     draw.text((x, y), text, font=font, fill=0)
     # Printer raster is 96 pixels wide and one row per dot along label length.

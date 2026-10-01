@@ -47,3 +47,12 @@ def test_line_breaks_are_rendered_as_spaces(monkeypatch):
 def test_date_label_fits():
     raster = render.render_text_raster("29-08-2026", 240)
     assert len(raster) == 240 * 12
+
+
+def test_text_keeps_clear_of_label_ends():
+    # Rows are dots along the label length; each row is 12 bytes wide.
+    raster = render.render_text_raster("A considerably longer label name", 240)
+    rows = [raster[i * 12:(i + 1) * 12] for i in range(240)]
+    inked = [i for i, row in enumerate(rows) if any(row)]
+    assert inked[0] >= render.EDGE_MARGIN_PX
+    assert inked[-1] <= 240 - 1 - render.EDGE_MARGIN_PX

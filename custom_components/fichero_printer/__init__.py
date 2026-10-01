@@ -47,7 +47,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     )
     # The query string changes with releases so dashboards cannot keep serving
     # an older card script from the browser cache after a HACS update.
-    add_extra_js_url(hass, f"{CARD_URL}?v=0.1.10")
+    add_extra_js_url(hass, f"{CARD_URL}?v=0.1.11")
 
     def manager_for(call: ServiceCall) -> FicheroManager:
         entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])
