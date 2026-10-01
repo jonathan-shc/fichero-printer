@@ -1,5 +1,8 @@
 """Dependency-light label renderer, kept separate for unit testing."""
 
+from functools import lru_cache
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 PRINTHEAD_PX = 96
@@ -13,6 +16,17 @@ EDGE_MARGIN_PX = 16
 # wrapped on spaces instead.
 MIN_MULTILINE_PX = 16
 LINE_SPACING_PX = 2
+# DejaVu Sans covers Latin-1 and more; Pillow's built-in font is ASCII-only and
+# prints accented characters as empty boxes. See fonts/LICENSE.
+FONT_PATH = Path(__file__).parent / "fonts" / "DejaVuSans.ttf"
+
+
+@lru_cache(maxsize=None)
+def _font(size: int):
+    try:
+        return ImageFont.truetype(str(FONT_PATH), size)
+    except OSError:
+        return ImageFont.load_default(size=size)
 
 
 def _wrap_line(draw, line, font, max_width):
@@ -40,7 +54,7 @@ def _fit_lines(draw, lines, label_rows, min_size, wrap):
     low, high = min_size, min(96, label_rows)
     while low <= high:
         size = (low + high) // 2
-        font = ImageFont.load_default(size=size)
+        font = _font(size)
         fitted = [w for line in lines for w in (_wrap_line(draw, line, font, max_width) if wrap else [line])]
         bboxes = [draw.textbbox((0, 0), line, font=font) for line in fitted]
         total = sum(b[3] - b[1] for b in bboxes) + LINE_SPACING_PX * (len(fitted) - 1)

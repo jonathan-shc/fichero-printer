@@ -104,3 +104,18 @@ def test_multiline_empty_raises():
     import pytest
     with pytest.raises(ValueError):
         render.render_text_raster("\n  \n", 240, multiline=True)
+
+
+def test_accented_characters_are_not_missing_glyph_boxes():
+    from PIL import Image, ImageDraw
+
+    def glyph(char):
+        image = Image.new("1", (80, 80), 1)
+        ImageDraw.Draw(image).text((5, 5), char, font=render._font(40), fill=0)
+        return image.tobytes()
+
+    notdef = glyph("\ue000")  # private-use code point: the font's missing glyph
+    for char in "éëüñç€":
+        assert glyph(char) != notdef, char
+    assert render.FONT_PATH.exists()
+    assert any(render.render_text_raster("Crème brûlée €5", 240))
