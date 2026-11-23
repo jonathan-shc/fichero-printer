@@ -34,6 +34,11 @@ PRINTHEAD_PX = 96
 BYTES_PER_ROW = 12
 DOTS_PER_MM = 8
 NAME_PREFIXES = ("FICHERO", "D11s_")
+# Without a SwitchBot nothing can power the printer on. A printer that is on
+# advertises several times per second, so a short wait (after the on-demand
+# active scan in _resolve_printer) is enough to tell "printer is off" apart
+# from a slow discovery.
+NO_SWITCHBOT_RESOLVE_TIMEOUT = 8
 UART_SERVICE_UUIDS = {
     "000018f0-0000-1000-8000-00805f9b34fb",
     "0000ff00-0000-1000-8000-00805f9b34fb",
@@ -64,6 +69,11 @@ class FicheroManager:
     @property
     def connected(self) -> bool:
         return self.client is not None and self.client.is_connected
+
+    @property
+    def has_switchbot(self) -> bool:
+        """Return whether a SwitchBot is configured to press the power button."""
+        return bool(self.entry.data.get(CONF_SWITCHBOT_ENTITY))
 
     async def async_start(self) -> None:
         """Start permanently monitoring the printer connection."""
@@ -173,6 +183,9 @@ class FicheroManager:
 
     async def _wake_and_wait_for_connection(self) -> None:
         """Wake immediately, then serialize the Bluetooth connection work."""
+        if not self.has_switchbot:
+            await self._connect_without_switchbot()
+            return
         async with self._wake_lock:
             if self.connected:
                 return
@@ -188,6 +201,27 @@ class FicheroManager:
                     self._set_status("connecting")
                     target = await self._resolve_printer(timeout=30)
                     await self._connect_to_printer(target)
+            except Exception as err:
+                self._set_status("disconnected", str(err))
+                raise HomeAssistantError(f"Could not connect to the printer: {err}") from err
+
+    async def _connect_without_switchbot(self) -> None:
+        """Connect to a printer that was switched on by hand, or fail fast."""
+        async with self._operation_lock:
+            if self.connected:
+                return
+            self._set_status("connecting")
+            try:
+                target = await self._resolve_printer(timeout=NO_SWITCHBOT_RESOLVE_TIMEOUT)
+            except HomeAssistantError as err:
+                message = (
+                    "The printer is off or out of Bluetooth range. "
+                    "Turn it on and try again"
+                )
+                self._set_status("disconnected", message)
+                raise HomeAssistantError(f"{message} ({err})") from err
+            try:
+                await self._connect_to_printer(target)
             except Exception as err:
                 self._set_status("disconnected", str(err))
                 raise HomeAssistantError(f"Could not connect to the printer: {err}") from err
@@ -350,10 +384,11 @@ class FicheroManager:
         self._response.set()
 
     async def async_disconnect(self, power_off: bool = True) -> None:
-        """Press SwitchBot directly."""
-        if not power_off:
-            # Unloading must release BlueZ/proxy resources without pressing
-            # the physical power button (which could turn the printer on).
+        """Press the SwitchBot to power off, or only release Bluetooth."""
+        if not power_off or not self.has_switchbot:
+            # Without a SwitchBot there is nothing to press, so only release
+            # the BlueZ/proxy resources. Unloading must do the same without
+            # pressing the physical power button (which could turn it on).
             async with self._operation_lock:
                 client, self.client = self.client, None
                 try:

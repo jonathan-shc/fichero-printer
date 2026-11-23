@@ -157,7 +157,7 @@ def test_bredr_unsupported_reports_actionable_error(manager_module, session):
 
 def test_switchbot_press_actually_connects_without_monitor(manager_module, session, monkeypatch):
     manager, target = session
-    manager.entry.data = {"startup_delay": 0}
+    manager.entry.data = {"startup_delay": 0, "switchbot_entity": "button.printer_power"}
     manager._resolve_printer = AsyncMock(return_value=target)
     connection = client()
     manager_module.establish_connection = AsyncMock(return_value=connection)
@@ -171,7 +171,7 @@ def test_switchbot_press_actually_connects_without_monitor(manager_module, sessi
 
 def test_wake_failure_preserves_bluez_error(manager_module, session):
     manager, target = session
-    manager.entry.data = {"startup_delay": 0}
+    manager.entry.data = {"startup_delay": 0, "switchbot_entity": "button.printer_power"}
     manager._resolve_printer = AsyncMock(return_value=target)
     manager._connect_to_printer = AsyncMock(side_effect=RuntimeError("BlueZ diagnostic"))
     with pytest.raises(manager_module.HomeAssistantError, match="BlueZ diagnostic"):
@@ -182,7 +182,7 @@ def test_wake_failure_preserves_bluez_error(manager_module, session):
 
 def test_switchbot_press_does_not_wait_for_background_connection_lock(session):
     manager, _ = session
-    manager.entry.data = {"startup_delay": 0}
+    manager.entry.data = {"startup_delay": 0, "switchbot_entity": "button.printer_power"}
 
     async def run():
         await manager._operation_lock.acquire()
@@ -207,7 +207,7 @@ def test_switchbot_press_does_not_wait_for_background_connection_lock(session):
 
 def test_concurrent_wake_requests_only_press_once(session):
     manager, _ = session
-    manager.entry.data = {"startup_delay": 0}
+    manager.entry.data = {"startup_delay": 0, "switchbot_entity": "button.printer_power"}
     connected = asyncio.Event()
 
     async def connect(_target):
@@ -345,3 +345,48 @@ def test_delete_missing_favorite_reports_error(manager_module, session):
         asyncio.run(manager.async_delete_favorite(index=4))
 
     manager._store.async_save.assert_not_awaited()
+
+
+def test_without_switchbot_connects_to_printer_switched_on_by_hand(manager_module, session):
+    manager, target = session
+    manager.entry.data = {}
+    manager._resolve_printer = AsyncMock(return_value=target)
+    connection = client()
+    manager_module.establish_connection = AsyncMock(return_value=connection)
+
+    asyncio.run(manager.async_connect())
+
+    manager._press_switchbot.assert_not_awaited()
+    assert manager.connected
+    assert manager.status == "connected"
+
+
+def test_without_switchbot_reports_printer_off_quickly(manager_module, session):
+    manager, _ = session
+    manager.entry.data = {}
+    manager._resolve_printer = AsyncMock(
+        side_effect=manager_module.HomeAssistantError("No connectable Fichero printer advertisement found")
+    )
+
+    with pytest.raises(manager_module.HomeAssistantError, match="Turn it on"):
+        asyncio.run(manager.async_connect())
+
+    manager._press_switchbot.assert_not_awaited()
+    timeout = manager._resolve_printer.await_args.kwargs["timeout"]
+    assert timeout == manager_module.NO_SWITCHBOT_RESOLVE_TIMEOUT < 30
+    assert manager.status == "disconnected"
+    assert "Turn it on" in manager.last_error
+
+
+def test_without_switchbot_disconnect_only_releases_bluetooth(session):
+    manager, _ = session
+    manager.entry.data = {}
+    connection = client()
+    manager.client = connection
+
+    asyncio.run(manager.async_disconnect())
+
+    connection.disconnect.assert_awaited_once()
+    manager._press_switchbot.assert_not_awaited()
+    assert manager.client is None
+    assert manager.status == "disconnected"

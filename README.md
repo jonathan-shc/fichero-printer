@@ -137,7 +137,8 @@ The package exports `PrinterClient`, `connect`, `PrinterError`, `PrinterNotFound
 This repository includes a local Home Assistant custom integration and a bundled
 dashboard card for the Fichero/D11s. It can:
 
-- press an existing SwitchBot entity before starting a printer session;
+- optionally press an existing SwitchBot entity before starting a printer session,
+  or work with a printer you switch on by hand;
 - connect through Home Assistant's shared Bluetooth scanner (including a
   connectable Bluetooth proxy), or use a configured Bluetooth address;
 - automatically wrap text and choose the largest font that fits the configured
@@ -165,9 +166,10 @@ Assistant configuration, then restart Home Assistant.
 In Home Assistant, go to **Settings → Devices & services → Add integration**, find
 **Fichero Label Printer**, and configure:
 
-1. The existing SwitchBot `switch`, `button`, or `input_button` entity which
-   physically presses the printer button.
-2. How long the printer needs after that press before Bluetooth is ready.
+1. Optionally, the existing SwitchBot `switch`, `button`, or `input_button`
+   entity which physically presses the printer button. Leave it empty if you
+   switch the printer on by hand (see below).
+2. How long the printer needs after a SwitchBot press before Bluetooth is ready.
 3. The physical label length (30 mm by default), density, and whether disconnect
    should press the SwitchBot again.
 4. Optionally, a fixed Bluetooth address. Leave it blank for name-based discovery
@@ -181,6 +183,31 @@ registered by the integration, so no separate Lovelace resource is needed.
 > The configured SwitchBot action is treated as a momentary physical press. Make
 > sure its press duration is already correct in Home Assistant, as the integration
 > deliberately does not change the SwitchBot configuration.
+
+#### Without a SwitchBot
+
+A SwitchBot is optional. Without one, switch the printer on by hand. While it is
+on and advertising, the integration connects in the background as usual. If you
+print while it is off, `print_label` fails after a short search (about 20 s,
+including Home Assistant's on-demand Bluetooth scan) instead of 40 s or more, with
+"The printer is off or out of Bluetooth range. Turn it on and try again", and the
+status sensor's `last_error` shows the same message. Use that in your own script
+or automation to notify someone, for example:
+
+```yaml
+- action: fichero_printer.print_label
+  continue_on_error: true
+  data:
+    config_entry_id: "{{ config_entry_id('sensor.fichero_d11s_status') }}"
+    text: "{{ text }}"
+- if: "{{ not is_state('sensor.fichero_d11s_status', 'connected') }}"
+  then:
+    - action: notify.notify
+      data:
+        message: "Turn on the label printer to print \"{{ text }}\"."
+```
+
+Without a SwitchBot, the disconnect action only closes the Bluetooth connection.
 
 ### Bluetooth connection troubleshooting
 
