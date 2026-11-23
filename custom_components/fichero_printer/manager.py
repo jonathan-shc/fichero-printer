@@ -34,6 +34,13 @@ PRINTHEAD_PX = 96
 BYTES_PER_ROW = 12
 DOTS_PER_MM = 8
 NAME_PREFIXES = ("FICHERO", "D11s_")
+# Raster transfer limits. Unacknowledged writes are only safe when the
+# Bluetooth stack applies back-pressure (a local BlueZ adapter does); an
+# ESPHome Bluetooth proxy forwards them without flow control and silently drops
+# chunks once its queue is full.
+RASTER_CHUNK_MAX = 200
+RASTER_UNACKED_CHUNK_MAX = 100
+RASTER_UNACKED_GAP = 0.15
 UART_SERVICE_UUIDS = {
     "000018f0-0000-1000-8000-00805f9b34fb",
     "0000ff00-0000-1000-8000-00805f9b34fb",
@@ -380,9 +387,40 @@ class FicheroManager:
         return bytes(self._buffer)
 
     async def _send_chunked(self, data: bytes) -> None:
-        for offset in range(0, len(data), 200):
-            await self._send(data[offset : offset + 200])
-            await asyncio.sleep(0.02)
+        """Send raster data so that no chunk can be lost silently.
+
+        Prefer GATT write-with-response, so the printer acknowledges every
+        chunk before the next one is sent. With write-without-response through
+        an ESPHome Bluetooth proxy, chunks that do not fit in the proxy's queue
+        are dropped: the printer stops halfway through the label, never gets
+        the form feed, and no error is raised. Fall back to small, paced
+        unacknowledged writes only if the characteristic cannot acknowledge.
+        """
+        if not self.connected:
+            raise HomeAssistantError("Printer disconnected during operation")
+        char = self.client.services.get_characteristic(WRITE_UUID)
+        acknowledged = "write" in (getattr(char, "properties", None) or ())
+        limit = getattr(char, "max_write_without_response_size", None) or (
+            (getattr(self.client, "mtu_size", None) or 23) - 3
+        )
+        size = max(
+            20,
+            min(RASTER_CHUNK_MAX if acknowledged else RASTER_UNACKED_CHUNK_MAX, limit),
+        )
+        _LOGGER.debug(
+            "Sending %d raster bytes in %d-byte %s chunks",
+            len(data),
+            size,
+            "acknowledged" if acknowledged else "unacknowledged",
+        )
+        for offset in range(0, len(data), size):
+            if not self.connected:
+                raise HomeAssistantError("Printer disconnected during operation")
+            await self.client.write_gatt_char(
+                WRITE_UUID, data[offset : offset + size], response=acknowledged
+            )
+            if not acknowledged:
+                await asyncio.sleep(RASTER_UNACKED_GAP)
 
     async def async_print(self, text: str, copies: int, multiline: bool = False) -> None:
         text = text.strip()

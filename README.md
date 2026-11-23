@@ -200,6 +200,11 @@ reporting a connection. Missing characteristics or stale D-Bus object paths trig
 one cache refresh and reconnection with fresh service discovery. Failed or cancelled
 notification setup releases the connection, as does unloading the integration.
 
+Label raster data is sent with acknowledged GATT writes (write-with-response), so
+every chunk is confirmed by the printer before the next one is sent. An ESPHome
+Bluetooth proxy applies no flow control to unacknowledged writes and silently drops
+chunks once its queue is full, which made labels stop halfway without an error.
+
 If connection problems persist, enable debug logging for
 `custom_components.fichero_printer` and `bleak_retry_connector`, reproduce the
 failure, and include the exception, Home Assistant version, and whether you use a
