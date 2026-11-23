@@ -345,3 +345,72 @@ def test_delete_missing_favorite_reports_error(manager_module, session):
         asyncio.run(manager.async_delete_favorite(index=4))
 
     manager._store.async_save.assert_not_awaited()
+
+
+def raster_client(properties, max_write=237):
+    characteristic = SimpleNamespace(
+        properties=properties, max_write_without_response_size=max_write
+    )
+    return SimpleNamespace(
+        is_connected=True,
+        services=SimpleNamespace(get_characteristic=Mock(return_value=characteristic)),
+        write_gatt_char=AsyncMock(),
+    )
+
+
+def sent_chunks(connection):
+    return [call.args[1] for call in connection.write_gatt_char.await_args_list]
+
+
+def test_raster_uses_acknowledged_writes_when_supported(session):
+    manager, _ = session
+    manager.client = raster_client(["write", "write-without-response"])
+    data = bytes(range(256)) * 11 + bytes(72)  # one 30 mm label: 2888 bytes
+
+    asyncio.run(manager._send_chunked(data))
+
+    calls = manager.client.write_gatt_char.await_args_list
+    assert all(call.kwargs["response"] is True for call in calls)
+    assert max(map(len, sent_chunks(manager.client))) == 200
+    assert b"".join(sent_chunks(manager.client)) == data
+
+
+def test_raster_without_acknowledged_writes_is_small_and_paced(manager_module, session, monkeypatch):
+    manager, _ = session
+    manager.client = raster_client(["write-without-response"])
+    sleep = AsyncMock()
+    monkeypatch.setattr(manager_module.asyncio, "sleep", sleep)
+    data = bytes(1000)
+
+    asyncio.run(manager._send_chunked(data))
+
+    calls = manager.client.write_gatt_char.await_args_list
+    assert all(call.kwargs["response"] is False for call in calls)
+    assert max(map(len, sent_chunks(manager.client))) == 100
+    assert sleep.await_count == len(calls)
+    assert b"".join(sent_chunks(manager.client)) == data
+
+
+def test_raster_chunks_fit_the_negotiated_mtu(session):
+    manager, _ = session
+    manager.client = raster_client(["write"], max_write=20)
+    data = bytes(range(100))
+
+    asyncio.run(manager._send_chunked(data))
+
+    assert max(map(len, sent_chunks(manager.client))) == 20
+    assert b"".join(sent_chunks(manager.client)) == data
+
+
+def test_raster_stops_when_printer_disconnects(manager_module, session):
+    manager, _ = session
+    connection = raster_client(["write"])
+    manager.client = connection
+
+    async def drop_connection(*_args, **_kwargs):
+        connection.is_connected = False
+
+    connection.write_gatt_char.side_effect = drop_connection
+    with pytest.raises(manager_module.HomeAssistantError, match="disconnected"):
+        asyncio.run(manager._send_chunked(bytes(1000)))
+    assert connection.write_gatt_char.await_count == 1
