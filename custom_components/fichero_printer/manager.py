@@ -35,8 +35,9 @@ BYTES_PER_ROW = 12
 DOTS_PER_MM = 8
 NAME_PREFIXES = ("FICHERO", "D11s_")
 # Without a SwitchBot nothing can power the printer on. A printer that is on
-# advertises several times per second, so a short wait is enough to tell
-# "printer is off" apart from a slow discovery.
+# advertises several times per second, so a short wait (after the on-demand
+# active scan in _resolve_printer) is enough to tell "printer is off" apart
+# from a slow discovery.
 NO_SWITCHBOT_RESOLVE_TIMEOUT = 8
 UART_SERVICE_UUIDS = {
     "000018f0-0000-1000-8000-00805f9b34fb",

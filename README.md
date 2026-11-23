@@ -188,7 +188,8 @@ registered by the integration, so no separate Lovelace resource is needed.
 
 A SwitchBot is optional. Without one, switch the printer on by hand. While it is
 on and advertising, the integration connects in the background as usual. If you
-print while it is off, `print_label` waits a few seconds and then fails with
+print while it is off, `print_label` fails after a short search (about 20 s,
+including Home Assistant's on-demand Bluetooth scan) instead of 40 s or more, with
 "The printer is off or out of Bluetooth range. Turn it on and try again", and the
 status sensor's `last_error` shows the same message. Use that in your own script
 or automation to notify someone, for example:
