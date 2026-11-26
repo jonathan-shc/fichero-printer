@@ -119,3 +119,96 @@ def test_accented_characters_are_not_missing_glyph_boxes():
         assert glyph(char) != notdef, char
     assert render.FONT_PATH.exists()
     assert any(render.render_text_raster("Crème brûlée €5", 240))
+
+
+# --- Icons, emoji, codes and offset -------------------------------------------------
+
+import pytest
+from PIL import Image
+
+
+def test_inline_icons_render_and_take_room():
+    plain = render.render_label("Milch", 240)
+    with_icon = render.render_label("[mdi:fridge] Milch", 240)
+    assert with_icon.tobytes() != plain.tobytes()
+    assert any(render.render_text_raster("[m3o:kitchen] Küche", 240))
+    # Home Assistant writes Material Symbols names with dashes.
+    assert render.icon_codepoint("m3o", "add-alert") == render.icon_codepoint("m3o", "add_alert")
+
+
+def test_unknown_icon_is_reported():
+    with pytest.raises(ValueError, match="Unknown icon: mdi:no-such-icon"):
+        render.render_label("[mdi:no-such-icon] x", 240)
+
+
+def test_emoji_use_the_emoji_font():
+    runs = render._runs("Pizza 🍕 ❤️", render._Icons())
+    assert ("emoji", "🍕") in runs
+    # A text-capable heart followed by VS16 asks for the emoji glyph.
+    assert ("emoji", "❤️") in runs
+    assert any(render.render_text_raster("Pizza 🍕", 240))
+
+
+def _decode(image):
+    zxingcpp = pytest.importorskip("zxingcpp")
+    image = image.convert("L")
+    big = Image.new("L", (image.width * 4 + 80, image.height * 4 + 80), 255)
+    big.paste(image.resize((image.width * 4, image.height * 4), Image.Resampling.NEAREST), (40, 40))
+    return [(result.format.name, result.text) for result in zxingcpp.read_barcodes(big)]
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("[qr:https://www.home-assistant.io] Home Assistant", ("QRCode", "https://www.home-assistant.io")),
+        ("[qr:WIFI:S:Gast;T:WPA;P:geheim 123;;] WLAN", ("QRCode", "WIFI:S:Gast;T:WPA;P:geheim 123;;")),
+        ("[barcode:4006381333931]", ("Code128", "4006381333931")),
+        ("Mehl [barcode:1234]", ("Code128", "1234")),
+        ("[barcode:ABC-123]", ("Code128", "ABC-123")),
+    ],
+)
+def test_codes_are_readable(text, expected):
+    assert _decode(render.render_label(text, 240)) == [expected]
+
+
+def _ink_height(image, x0, x1):
+    """Height of the black area in a column range of a rendered label."""
+    from PIL import ImageOps
+
+    box = ImageOps.invert(image.convert("L")).crop((x0, 0, x1, 96)).getbbox()
+    return 0 if box is None else box[3] - box[1]
+
+
+def test_codes_go_left_or_right_of_the_text():
+    left = render.render_label("[qr:x] Hello", 240)
+    right = render.render_label("Hello [qr:x]", 240)
+    # The QR code is almost as tall as the printhead; the text is not.
+    assert _ink_height(left, 0, 60) > 80 > _ink_height(right, 0, 60)
+    assert _ink_height(right, 180, 240) > 80 > _ink_height(left, 180, 240)
+
+
+def test_too_much_qr_content_is_rejected():
+    with pytest.raises(ValueError, match="too long"):
+        render.render_label("[qr:" + "x" * 300 + "]", 240)
+
+
+def test_offset_moves_content_along_the_label():
+    base = _inked_rows(render.render_text_raster("Kitchen", 240))
+    shifted = _inked_rows(render.render_text_raster("Kitchen", 240, offset_px=8))
+    # The canvas is rotated: moving right in reading direction prints earlier rows.
+    assert shifted == [row - 8 for row in base]
+
+
+def test_preview_is_a_scaled_png():
+    png = render.render_preview_png("[mdi:fridge] Milch", 240)
+    assert png.startswith(b"\x89PNG")
+    image = Image.open(__import__("io").BytesIO(png))
+    assert image.size == (480, 192)
+
+
+def test_only_a_code_is_fine_but_empty_is_not():
+    assert any(render.render_text_raster("[qr:hello]", 240))
+    with pytest.raises(ValueError):
+        render.render_label("[qr:]", 240)
+    with pytest.raises(ValueError):
+        render.render_label("   ", 240)

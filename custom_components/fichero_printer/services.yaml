@@ -1,6 +1,6 @@
 connect:
   name: Connect
-  description: Press the configured SwitchBot and open a Bluetooth session.
+  description: Press the configured SwitchBot (if any) and open a Bluetooth session.
   fields:
     config_entry_id:
       name: Printer configuration
@@ -10,7 +10,7 @@ connect:
           integration: fichero_printer
 disconnect:
   name: Disconnect
-  description: Close Bluetooth and optionally press the configured SwitchBot to power off.
+  description: Close the Bluetooth session and stop reconnecting automatically until the next print. Presses the SwitchBot if configured to.
   fields:
     config_entry_id:
       name: Printer configuration
@@ -20,7 +20,7 @@ disconnect:
           integration: fichero_printer
 print_label:
   name: Print label
-  description: Automatically fit text and print one or more labels, connecting first when needed.
+  description: Fit text, icons, emoji, QR codes and barcodes on a label and print it, connecting first when needed.
   fields:
     config_entry_id:
       name: Printer configuration
@@ -30,7 +30,9 @@ print_label:
           integration: fichero_printer
     text:
       name: Text
+      description: "Label text. Inline tokens: [mdi:fridge] or [m3o:kitchen] for icons, [qr:text or link] for a QR code, [barcode:12345] for a Code 128 barcode. Emoji are supported."
       required: true
+      example: "[mdi:fridge] Milk"
       selector:
         text:
           multiline: true
@@ -84,3 +86,13 @@ delete_favorite:
       required: false
       selector:
         text:
+calibrate_gap:
+  name: Calibrate label gap
+  description: Measure the gap between labels again, for a printer that feeds blank labels. Feeds a label or two; switch the printer off and on afterwards.
+  fields:
+    config_entry_id:
+      name: Printer configuration
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer

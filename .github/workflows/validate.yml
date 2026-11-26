@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m pip install -e . pytest pytest-asyncio bleak-retry-connector dbus-fast
+      - run: python -m pip install -e . pytest pytest-asyncio bleak-retry-connector dbus-fast segno zxing-cpp
       - run: python -m pytest -q
 
   hacs:
