@@ -72,6 +72,10 @@ const INSERTS = [
 
 // Renderer messages from the integration, translated for the preview line.
 const ERRORS_DE = [
+  [/^(Could not connect to the printer: )?Printer not found - is it switched on\?$/, "Drucker nicht gefunden – ist er eingeschaltet?"],
+  [/^Could not connect to the printer: (.+)$/, "Keine Verbindung zum Drucker: $1"],
+  [/^Printer is not ready \(paper, cover, heat, or status error\)$/, "Drucker nicht bereit (Papier, Deckel, Hitze oder Statusfehler)"],
+  [/^Printer did not respond$/, "Der Drucker antwortet nicht"],
   [/^Unknown icon: (.+)$/, "Unbekanntes Icon: $1"],
   [/^Text cannot fit on this label$/, "Der Text passt nicht auf das Etikett"],
   [/^Text cannot be empty$/, "Kein Text"],
@@ -176,7 +180,7 @@ class FicheroPrinterCard extends HTMLElement {
       });
       return true;
     } catch (error) {
-      this._notify(error?.message || String(error));
+      this._notify(translateError(error?.message || String(error), language(this._hass)));
       return false;
     } finally {
       this._busy = false;
@@ -381,7 +385,7 @@ class FicheroPrinterCard extends HTMLElement {
     connection.textContent = connected ? t.disconnect : t.connect;
     const error = $("error");
     error.hidden = !state.attributes.last_error;
-    error.textContent = state.attributes.last_error || "";
+    error.textContent = translateError(state.attributes.last_error || "", language(this._hass));
 
     const area = $("text");
     area.placeholder = t.placeholder;

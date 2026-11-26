@@ -207,8 +207,10 @@ class FicheroManager:
                         )
                     except HomeAssistantError as err:
                         if manual:
+                            # The scanner details are for debugging, not for the card.
+                            _LOGGER.debug("Printer not found: %s", err)
                             raise HomeAssistantError(
-                                f"Printer not found - is it switched on? ({err})"
+                                "Printer not found - is it switched on?"
                             ) from err
                         raise
                     await self._connect_to_printer(target)
