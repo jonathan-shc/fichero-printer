@@ -1,0 +1,155 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Fichero-Etikettendrucker einrichten",
+        "description": "An den Drucker wird noch nichts gesendet. Ohne SwitchBot schaltest du den Drucker von Hand ein: Home Assistant verbindet sich, sobald er sichtbar ist.",
+        "data": {
+          "name": "Name",
+          "address": "Bluetooth-Adresse (optional)",
+          "switchbot_entity": "SwitchBot-Entität (optional)",
+          "startup_delay": "Wartezeit nach dem Drücken (Sekunden)",
+          "label_length": "Etikettenlänge (mm)",
+          "density": "Druckdichte",
+          "offset_mm": "Druck-Versatz (mm)",
+          "power_off_on_disconnect": "Beim Trennen SwitchBot drücken"
+        },
+        "data_description": {
+          "address": "Leer lassen, um den Drucker über seinen Namen zu finden (FICHERO… oder D11s_…).",
+          "switchbot_entity": "Ein Schalter, Button oder Tasten-Helfer, der die Einschalttaste des Druckers physisch drückt. Leer lassen, wenn du den Drucker von Hand einschaltest.",
+          "startup_delay": "So lange braucht der Drucker nach dem SwitchBot-Druck, bis Bluetooth bereit ist.",
+          "label_length": "Länge eines Etiketts entlang der Rolle, z. B. 30 bei 30 × 14 mm.",
+          "density": "Dunkler drucken braucht mehr Hitze.",
+          "offset_mm": "Verschiebt alles entlang des Etiketts. Positive Werte nach rechts (in Leserichtung), negative nach links. Hilft, wenn dein Drucker nicht mittig druckt.",
+          "power_off_on_disconnect": "Schaltet den Drucker beim Trennen per SwitchBot aus. Nur mit SwitchBot."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Dieser Drucker ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Druckereinstellungen",
+        "description": "Änderungen gelten sofort; der Drucker verbindet sich automatisch neu.",
+        "data": {
+          "switchbot_entity": "SwitchBot-Entität (optional)",
+          "startup_delay": "Wartezeit nach dem Drücken (Sekunden)",
+          "label_length": "Etikettenlänge (mm)",
+          "density": "Druckdichte",
+          "offset_mm": "Druck-Versatz (mm)",
+          "power_off_on_disconnect": "Beim Trennen SwitchBot drücken"
+        },
+        "data_description": {
+          "switchbot_entity": "Ein Schalter, Button oder Tasten-Helfer, der die Einschalttaste des Druckers physisch drückt. Leer lassen, wenn du den Drucker von Hand einschaltest.",
+          "startup_delay": "So lange braucht der Drucker nach dem SwitchBot-Druck, bis Bluetooth bereit ist.",
+          "label_length": "Länge eines Etiketts entlang der Rolle, z. B. 30 bei 30 × 14 mm.",
+          "density": "Dunkler drucken braucht mehr Hitze.",
+          "offset_mm": "Verschiebt alles entlang des Etiketts. Positive Werte nach rechts (in Leserichtung), negative nach links. Hilft, wenn dein Drucker nicht mittig druckt.",
+          "power_off_on_disconnect": "Schaltet den Drucker beim Trennen per SwitchBot aus. Nur mit SwitchBot."
+        }
+      }
+    }
+  },
+  "selector": {
+    "density": {
+      "options": {
+        "0": "Hell",
+        "1": "Mittel",
+        "2": "Dunkel"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "disconnected": "Getrennt",
+          "powering_on": "Schaltet ein",
+          "connecting": "Verbinde",
+          "connected": "Verbunden",
+          "printing": "Druckt"
+        }
+      }
+    }
+  },
+  "services": {
+    "connect": {
+      "name": "Verbinden",
+      "description": "Drückt den SwitchBot (falls eingerichtet) und baut die Bluetooth-Verbindung auf.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Drucker",
+          "description": "Der Fichero-Drucker, der verwendet werden soll."
+        }
+      }
+    },
+    "disconnect": {
+      "name": "Trennen",
+      "description": "Trennt die Bluetooth-Verbindung und verbindet bis zum nächsten Druck nicht automatisch neu. Drückt den SwitchBot, wenn so eingestellt.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Drucker",
+          "description": "Der Fichero-Drucker, der verwendet werden soll."
+        }
+      }
+    },
+    "print_label": {
+      "name": "Etikett drucken",
+      "description": "Passt Text, Icons, Emojis, QR-Codes und Barcodes auf ein Etikett ein und druckt es; verbindet sich bei Bedarf vorher.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Drucker",
+          "description": "Der Fichero-Drucker, der verwendet werden soll."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Etikettentext. Platzhalter: [mdi:fridge] oder [m3o:kitchen] für Icons, [qr:https://…] für einen QR-Code, [barcode:12345] für einen Code-128-Barcode. Emojis werden unterstützt."
+        },
+        "copies": {
+          "name": "Anzahl",
+          "description": "Wie viele Etiketten gedruckt werden."
+        },
+        "multiline": {
+          "name": "Mehrzeilig",
+          "description": "Behält Zeilenumbrüche bei und druckt jede Zeile einzeln; umgebrochen wird nur, wenn eine Zeile sonst zu klein würde."
+        }
+      }
+    },
+    "save_favorite": {
+      "name": "Favorit speichern",
+      "description": "Speichert einen Etikettentext als Kurzwahl in der Dashboard-Karte.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Drucker",
+          "description": "Der Fichero-Drucker, der verwendet werden soll."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Zu speichernder Etikettentext, inklusive Platzhaltern."
+        }
+      }
+    },
+    "delete_favorite": {
+      "name": "Favorit löschen",
+      "description": "Entfernt eine gespeicherte Kurzwahl.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Drucker",
+          "description": "Der Fichero-Drucker, der verwendet werden soll."
+        },
+        "index": {
+          "name": "Favoriten-Position",
+          "description": "Position (ab 0), wie sie die Dashboard-Karte verwendet."
+        },
+        "text": {
+          "name": "Favoriten-Text",
+          "description": "Textwert, für bestehende Automationen beibehalten."
+        }
+      }
+    }
+  }
+}

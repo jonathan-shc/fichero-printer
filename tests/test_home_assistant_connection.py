@@ -345,3 +345,58 @@ def test_delete_missing_favorite_reports_error(manager_module, session):
         asyncio.run(manager.async_delete_favorite(index=4))
 
     manager._store.async_save.assert_not_awaited()
+
+
+def test_manual_power_connects_without_switchbot_or_delay(manager_module, session, monkeypatch):
+    manager, target = session
+    manager._press_switchbot = manager_module.FicheroManager._press_switchbot.__get__(manager)
+    manager.entry.data = {"startup_delay": 30}
+    manager._resolve_printer = AsyncMock(return_value=target)
+    manager_module.establish_connection = AsyncMock(return_value=client())
+    sleep = AsyncMock()
+    monkeypatch.setattr(manager_module.asyncio, "sleep", sleep)
+    asyncio.run(manager.async_connect())
+    assert manager.connected
+    sleep.assert_not_awaited()
+    assert manager._resolve_printer.call_args.kwargs["timeout"] == manager_module.MANUAL_POWER_TIMEOUT
+
+
+def test_manual_power_reports_switched_off_printer(manager_module, session):
+    manager, _ = session
+    manager._press_switchbot = manager_module.FicheroManager._press_switchbot.__get__(manager)
+    manager._resolve_printer = AsyncMock(side_effect=manager_module.HomeAssistantError("nothing"))
+    with pytest.raises(manager_module.HomeAssistantError, match="switched on"):
+        asyncio.run(manager.async_connect())
+
+
+def test_user_disconnect_stops_auto_reconnect_until_next_connect(manager_module, session):
+    manager, target = session
+    connection = client()
+    manager.client = connection
+    asyncio.run(manager.async_disconnect())
+    connection.disconnect.assert_awaited_once()
+    manager._press_switchbot.assert_not_awaited()
+    assert manager._hold
+    manager._visible_printer = Mock(return_value=target)
+
+    async def one_monitor_pass():
+        manager._monitor_stop.clear()
+        task = asyncio.create_task(manager._connection_monitor())
+        await asyncio.sleep(0.05)
+        manager._monitor_stop.set()
+        await task
+
+    manager_module.establish_connection = AsyncMock(return_value=client())
+    asyncio.run(one_monitor_pass())
+    manager._visible_printer.assert_not_called()
+    assert not manager.connected
+    manager._resolve_printer = AsyncMock(return_value=target)
+    asyncio.run(manager.async_connect())
+    assert not manager._hold and manager.connected
+
+
+def test_disconnect_presses_switchbot_only_when_configured(session):
+    manager, _ = session
+    manager.entry.data = {"switchbot_entity": "switch.bot", "power_off_on_disconnect": True}
+    asyncio.run(manager.async_disconnect())
+    manager._press_switchbot.assert_awaited_once()

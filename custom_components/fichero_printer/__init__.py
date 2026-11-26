@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import voluptuous as vol
 
+from homeassistant import config_entries
+from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -15,6 +18,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CARD_URL,
+    CONF_LABEL_LENGTH,
     DOMAIN,
     PLATFORMS,
     SERVICE_CONNECT,
@@ -22,8 +26,12 @@ from .const import (
     SERVICE_DISCONNECT,
     SERVICE_PRINT,
     SERVICE_SAVE_FAVORITE,
+    VERSION,
+    WS_PREVIEW,
 )
 from .manager import FicheroManager
+from .render import DOTS_PER_MM, MAX_TEXT_LENGTH, render_preview_png
+from .settings import entry_settings
 
 SERVICE_ENTRY_SCHEMA = vol.Schema({vol.Required("config_entry_id"): cv.string})
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -51,7 +59,8 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     )
     # The query string changes with releases so dashboards cannot keep serving
     # an older card script from the browser cache after a HACS update.
-    add_extra_js_url(hass, f"{CARD_URL}?v=0.1.14")
+    add_extra_js_url(hass, f"{CARD_URL}?v={VERSION}")
+    websocket_api.async_register_command(hass, ws_preview)
 
     def manager_for(call: ServiceCall) -> FicheroManager:
         entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])
@@ -89,9 +98,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = FicheroManager(hass, entry)
     await manager.async_load()
     entry.runtime_data = manager
+    if not hasattr(config_entries, "OptionsFlowWithReload"):
+        # Older cores: apply changed options by reloading the entry.
+        entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await manager.async_start()
     return True
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): WS_PREVIEW,
+        vol.Required("config_entry_id"): str,
+        vol.Required("text"): vol.All(str, vol.Length(max=MAX_TEXT_LENGTH)),
+        vol.Optional("multiline", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_preview(hass: HomeAssistant, connection, msg: dict) -> None:
+    """Render a label preview for the dashboard card without printing."""
+    entry = hass.config_entries.async_get_entry(msg["config_entry_id"])
+    if entry is None or entry.domain != DOMAIN:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Printer configuration not found")
+        return
+    label_rows = int(entry_settings(entry)[CONF_LABEL_LENGTH]) * DOTS_PER_MM
+    try:
+        png = await hass.async_add_executor_job(
+            render_preview_png, msg["text"], label_rows, msg["multiline"]
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_label", str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "image": "data:image/png;base64," + base64.b64encode(png).decode(),
+            "label_length_mm": label_rows // DOTS_PER_MM,
+        },
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

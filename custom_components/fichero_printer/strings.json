@@ -3,15 +3,151 @@
     "step": {
       "user": {
         "title": "Set up your Fichero label printer",
-        "description": "The Bluetooth address is optional; leave it blank to scan whenever a session starts. Select the existing SwitchBot entity that presses the printer's power button.",
+        "description": "Nothing is sent to the printer yet. Without a SwitchBot, switch the printer on by hand: Home Assistant connects as soon as it sees it.",
         "data": {
           "name": "Name",
           "address": "Bluetooth address (optional)",
-          "switchbot_entity": "SwitchBot press entity",
+          "switchbot_entity": "SwitchBot press entity (optional)",
           "startup_delay": "Seconds to wait after pressing",
           "label_length": "Label length (mm)",
           "density": "Print density",
+          "offset_mm": "Print offset (mm)",
           "power_off_on_disconnect": "Press SwitchBot when disconnecting"
+        },
+        "data_description": {
+          "address": "Leave blank to find the printer by its name (FICHERO… or D11s_…).",
+          "switchbot_entity": "A switch, button or input button that physically presses the printer's power button. Leave empty if you switch the printer on by hand.",
+          "startup_delay": "How long the printer needs after a SwitchBot press before Bluetooth is ready.",
+          "label_length": "Physical length of one label along the paper, e.g. 30 for 30 × 14 mm labels.",
+          "density": "Darker printing uses more heat.",
+          "offset_mm": "Moves everything along the label. Positive values move it to the right (in reading direction), negative to the left. Use it if your printer prints off-centre.",
+          "power_off_on_disconnect": "Switch the printer off with the SwitchBot when you disconnect. Only used with a SwitchBot."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This printer is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Printer settings",
+        "description": "Changes apply right away; the printer reconnects automatically.",
+        "data": {
+          "switchbot_entity": "SwitchBot press entity (optional)",
+          "startup_delay": "Seconds to wait after pressing",
+          "label_length": "Label length (mm)",
+          "density": "Print density",
+          "offset_mm": "Print offset (mm)",
+          "power_off_on_disconnect": "Press SwitchBot when disconnecting"
+        },
+        "data_description": {
+          "switchbot_entity": "A switch, button or input button that physically presses the printer's power button. Leave empty if you switch the printer on by hand.",
+          "startup_delay": "How long the printer needs after a SwitchBot press before Bluetooth is ready.",
+          "label_length": "Physical length of one label along the paper, e.g. 30 for 30 × 14 mm labels.",
+          "density": "Darker printing uses more heat.",
+          "offset_mm": "Moves everything along the label. Positive values move it to the right (in reading direction), negative to the left. Use it if your printer prints off-centre.",
+          "power_off_on_disconnect": "Switch the printer off with the SwitchBot when you disconnect. Only used with a SwitchBot."
+        }
+      }
+    }
+  },
+  "selector": {
+    "density": {
+      "options": {
+        "0": "Light",
+        "1": "Medium",
+        "2": "Dark"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "disconnected": "Disconnected",
+          "powering_on": "Powering on",
+          "connecting": "Connecting",
+          "connected": "Connected",
+          "printing": "Printing"
+        }
+      }
+    }
+  },
+  "services": {
+    "connect": {
+      "name": "Connect",
+      "description": "Press the configured SwitchBot (if any) and open a Bluetooth session.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Printer",
+          "description": "The Fichero printer to use."
+        }
+      }
+    },
+    "disconnect": {
+      "name": "Disconnect",
+      "description": "Close the Bluetooth session and stop reconnecting automatically until the next print. Presses the SwitchBot if configured to.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Printer",
+          "description": "The Fichero printer to use."
+        }
+      }
+    },
+    "print_label": {
+      "name": "Print label",
+      "description": "Fit text, icons, emoji, QR codes and barcodes on a label and print it, connecting first when needed.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Printer",
+          "description": "The Fichero printer to use."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Label text. Inline tokens: [mdi:fridge] or [m3o:kitchen] for icons, [qr:https://…] for a QR code, [barcode:12345] for a Code 128 barcode. Emoji are supported."
+        },
+        "copies": {
+          "name": "Copies",
+          "description": "Number of labels to print."
+        },
+        "multiline": {
+          "name": "Multiline",
+          "description": "Keep typed line breaks and print each line on its own row, wrapping only lines that would get too small."
+        }
+      }
+    },
+    "save_favorite": {
+      "name": "Save favorite",
+      "description": "Save label text as a shortcut on the dashboard card.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Printer",
+          "description": "The Fichero printer to use."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Label text to save, including any tokens."
+        }
+      }
+    },
+    "delete_favorite": {
+      "name": "Delete favorite",
+      "description": "Remove a saved label shortcut.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Printer",
+          "description": "The Fichero printer to use."
+        },
+        "index": {
+          "name": "Favorite position",
+          "description": "Zero-based position used by the dashboard card."
+        },
+        "text": {
+          "name": "Favorite text",
+          "description": "Text value retained for existing automations."
         }
       }
     }

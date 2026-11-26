@@ -20,19 +20,20 @@ from .const import (
     CONF_ADDRESS,
     CONF_DENSITY,
     CONF_LABEL_LENGTH,
+    CONF_OFFSET,
     CONF_POWER_OFF_ON_DISCONNECT,
     CONF_STARTUP_DELAY,
-    CONF_SWITCHBOT_ENTITY,
-    DEFAULT_STARTUP_DELAY,
 )
-from .render import render_text_raster
+from .render import DOTS_PER_MM, render_text_raster
+from .settings import entry_settings, switchbot_entity
 
 _LOGGER = logging.getLogger(__name__)
 WRITE_UUID = "00002af1-0000-1000-8000-00805f9b34fb"
 NOTIFY_UUID = "00002af0-0000-1000-8000-00805f9b34fb"
 PRINTHEAD_PX = 96
 BYTES_PER_ROW = 12
-DOTS_PER_MM = 8
+# Without a SwitchBot the printer is switched on by hand: give it a moment.
+MANUAL_POWER_TIMEOUT = 15
 NAME_PREFIXES = ("FICHERO", "D11s_")
 UART_SERVICE_UUIDS = {
     "000018f0-0000-1000-8000-00805f9b34fb",
@@ -60,6 +61,13 @@ class FicheroManager:
         self.last_error: str | None = None
         self._monitor_task: asyncio.Task | None = None
         self._monitor_stop = asyncio.Event()
+        # Set by a manual disconnect so the monitor stops reconnecting until
+        # the next connect or print request.
+        self._hold = False
+
+    @property
+    def settings(self) -> dict:
+        return entry_settings(self.entry)
 
     @property
     def connected(self) -> bool:
@@ -91,7 +99,7 @@ class FicheroManager:
         while not self._monitor_stop.is_set():
             try:
                 if self.connected:
-                    if self.status != "connected":
+                    if self.status not in ("connected", "printing"):
                         self._set_status("connected")
                 elif not self._operation_lock.locked():
                     if self.status != "disconnected":
@@ -99,7 +107,7 @@ class FicheroManager:
 
                     # Only try to connect when the printer is already
                     # advertising. Never press the SwitchBot from the monitor.
-                    target = self._visible_printer()
+                    target = None if self._hold else self._visible_printer()
 
                     if target is not None:
                         async with self._operation_lock:
@@ -149,8 +157,11 @@ class FicheroManager:
         self.last_error = error
         self._notify()
 
-    async def _press_switchbot(self) -> None:
-        entity_id = self.entry.data[CONF_SWITCHBOT_ENTITY]
+    async def _press_switchbot(self) -> bool:
+        """Press the power button; False when none is configured."""
+        entity_id = switchbot_entity(self.settings)
+        if entity_id is None:
+            return False
         domain = entity_id.split(".", 1)[0]
         if self.hass.states.get(entity_id) is None:
             raise HomeAssistantError(
@@ -166,9 +177,11 @@ class FicheroManager:
             {"entity_id": entity_id},
             blocking=True,
         )
+        return True
 
     async def async_connect(self) -> None:
         """Wake the printer once and establish a usable BLE session."""
+        self._hold = False
         await self._wake_and_wait_for_connection()
 
     async def _wake_and_wait_for_connection(self) -> None:
@@ -179,14 +192,25 @@ class FicheroManager:
             try:
                 # Do this before waiting for the Bluetooth operation lock. The
                 # background monitor can hold that lock for several seconds.
-                self._set_status("powering_on")
-                await self._press_switchbot()
-                await asyncio.sleep(self.entry.data.get(CONF_STARTUP_DELAY, DEFAULT_STARTUP_DELAY))
+                settings = self.settings
+                manual = switchbot_entity(settings) is None
+                self._set_status("connecting" if manual else "powering_on")
+                if await self._press_switchbot():
+                    await asyncio.sleep(settings[CONF_STARTUP_DELAY])
                 async with self._operation_lock:
                     if self.connected:
                         return
                     self._set_status("connecting")
-                    target = await self._resolve_printer(timeout=30)
+                    try:
+                        target = await self._resolve_printer(
+                            timeout=MANUAL_POWER_TIMEOUT if manual else 30
+                        )
+                    except HomeAssistantError as err:
+                        if manual:
+                            raise HomeAssistantError(
+                                f"Printer not found - is it switched on? ({err})"
+                            ) from err
+                        raise
                     await self._connect_to_printer(target)
             except Exception as err:
                 self._set_status("disconnected", str(err))
@@ -350,19 +374,24 @@ class FicheroManager:
         self._response.set()
 
     async def async_disconnect(self, power_off: bool = True) -> None:
-        """Press SwitchBot directly."""
-        if not power_off:
-            # Unloading must release BlueZ/proxy resources without pressing
-            # the physical power button (which could turn the printer on).
-            async with self._operation_lock:
-                client, self.client = self.client, None
-                try:
-                    if client is not None:
-                        await client.disconnect()
-                finally:
-                    self._set_status("disconnected")
-            return
-        await self._press_switchbot()
+        """Close the session; optionally press the SwitchBot to power off.
+
+        ``power_off=False`` is used on unload: it releases BlueZ/proxy
+        resources without pressing the physical power button (which could
+        turn the printer on). A user disconnect also stops the monitor from
+        reconnecting until the next connect or print request.
+        """
+        if power_off:
+            self._hold = True
+        async with self._operation_lock:
+            client, self.client = self.client, None
+            try:
+                if client is not None:
+                    await client.disconnect()
+            finally:
+                self._set_status("disconnected")
+        if power_off and self.settings[CONF_POWER_OFF_ON_DISCONNECT]:
+            await self._press_switchbot()
 
     async def _send(self, data: bytes, wait: bool = False, timeout: float = 3) -> bytes:
         if not self.connected:
@@ -390,6 +419,17 @@ class FicheroManager:
             raise HomeAssistantError("Label text cannot be empty")
         if not 1 <= copies <= 100:
             raise HomeAssistantError("Copies must be between 1 and 100")
+        settings = self.settings
+        label_rows = int(settings[CONF_LABEL_LENGTH]) * DOTS_PER_MM
+        offset_px = round(float(settings[CONF_OFFSET]) * DOTS_PER_MM)
+        # Render before waking the printer so invalid text fails fast.
+        try:
+            raster = await self.hass.async_add_executor_job(
+                render_text_raster, text, label_rows, multiline, offset_px
+            )
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        self._hold = False
         if not self.connected:
             await self._wake_and_wait_for_connection()
 
@@ -397,9 +437,8 @@ class FicheroManager:
             if not self.connected:
                 raise HomeAssistantError("Printer disconnected before printing")
             try:
-                label_rows = self.entry.data[CONF_LABEL_LENGTH] * DOTS_PER_MM
-                raster = render_text_raster(text, label_rows, multiline)
-                await self._send(bytes([0x10, 0xFF, 0x10, 0, self.entry.data[CONF_DENSITY]]), True)
+                self._set_status("printing")
+                await self._send(bytes([0x10, 0xFF, 0x10, 0, int(settings[CONF_DENSITY])]), True)
                 await asyncio.sleep(0.1)
                 for _ in range(copies):
                     status = await self._send(bytes([0x10, 0xFF, 0x40]), True)

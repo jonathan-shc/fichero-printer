@@ -137,15 +137,51 @@ The package exports `PrinterClient`, `connect`, `PrinterError`, `PrinterNotFound
 This repository includes a local Home Assistant custom integration and a bundled
 dashboard card for the Fichero/D11s. It can:
 
-- press an existing SwitchBot entity before starting a printer session;
+- optionally press an existing SwitchBot entity before starting a printer
+  session, or simply connect as soon as you switch the printer on by hand;
 - connect through Home Assistant's shared Bluetooth scanner (including a
   connectable Bluetooth proxy), or use a configured Bluetooth address;
 - automatically wrap text and choose the largest font that fits the configured
   label length and the 96-pixel printhead;
-- print 1–100 copies, print today's date as `dd-mm-yyyy`, and persist favorite
-  label shortcuts in Home Assistant;
+- print inline icons, emoji, QR codes and Code 128 barcodes (see below);
+- show a live preview of the label in the dashboard card before printing;
+- print 1–100 copies, print today's date, and persist favorite label shortcuts
+  in Home Assistant;
 - show live powering-on, connecting, connected, printing, error, and disconnected
-  status; and explicitly connect or disconnect/power off.
+  status; and explicitly connect or disconnect/power off;
+- change label length, density, a print offset and the SwitchBot at any time
+  under **Configure**, without re-adding the printer. The card, setup and
+  actions are available in English and German.
+
+### Icons, emoji, QR codes and barcodes
+
+The label text of the card and of `fichero_printer.print_label` understands
+inline tokens:
+
+| Token | Prints |
+| --- | --- |
+| `[mdi:fridge]` | A [Material Design Icon](https://pictogrammers.com/library/mdi/), inline like a character |
+| `[m3o:kitchen]` | A [Material Symbols](https://fonts.google.com/icons) (outlined) icon; names may use `-` or `_` |
+| `[qr:https://example.com]` | A QR code, e.g. a link or `WIFI:S:Guest;T:WPA;P:secret;;` |
+| `[barcode:4006381333931]` | A Code 128 barcode with its text underneath |
+
+Emoji such as 🍕 or ❄️ are printed with the bundled Noto Emoji font. A QR code
+or barcode written before the text is placed to its left, otherwise to its
+right; the text is fitted into the remaining space:
+
+```yaml
+action: fichero_printer.print_label
+data:
+  config_entry_id: !input printer
+  text: "[qr:WIFI:S:Guest;T:WPA;P:secret;;] Guest Wi-Fi"
+```
+
+### Print offset
+
+Some printers start a label slightly early or late, so the content is not
+centred. Set **Print offset (mm)** under **Configure** on the integration:
+positive values move everything to the right (in reading direction), negative
+values to the left, in 0.5 mm steps.
 
 ### Install with HACS
 
@@ -165,13 +201,18 @@ Assistant configuration, then restart Home Assistant.
 In Home Assistant, go to **Settings → Devices & services → Add integration**, find
 **Fichero Label Printer**, and configure:
 
-1. The existing SwitchBot `switch`, `button`, or `input_button` entity which
-   physically presses the printer button.
-2. How long the printer needs after that press before Bluetooth is ready.
-3. The physical label length (30 mm by default), density, and whether disconnect
-   should press the SwitchBot again.
+1. Optionally, the existing SwitchBot `switch`, `button`, or `input_button`
+   entity which physically presses the printer button. Leave it empty to switch
+   the printer on by hand: Home Assistant connects as soon as it advertises.
+2. How long the printer needs after a SwitchBot press before Bluetooth is ready.
+3. The physical label length (30 mm by default), density, print offset, and
+   whether disconnect should press the SwitchBot again.
 4. Optionally, a fixed Bluetooth address. Leave it blank for name-based discovery
    (`FICHERO…` or `D11s_…`) each time a session starts.
+
+All of these except the name and address can be changed later with
+**Configure** on the integration. **Disconnect** closes the Bluetooth session and
+stops automatic reconnects until the next connect or print request.
 
 Add the **Fichero Label Printer** card from the dashboard card picker. With one
 printer it discovers the status entity automatically. With multiple printers,
@@ -212,7 +253,7 @@ bleak-retry-connector dbus-fast` followed by `python -m pytest -q`.
 
 ## TODO
 
-- [ ] Emoji support in text labels. The default Pillow font has no emoji glyphs, so they render as squares. Needs two-pass rendering: split text into emoji/non-emoji segments, render emoji with Apple Color Emoji (macOS) or Noto Color Emoji (Linux) using `embedded_color=True`, then composite onto the label.
+- [ ] Emoji support in CLI text labels (the Home Assistant integration prints emoji with Noto Emoji). The default Pillow font has no emoji glyphs, so they render as squares. Needs two-pass rendering: split text into emoji/non-emoji segments, render emoji with Apple Color Emoji (macOS) or Noto Color Emoji (Linux) using `embedded_color=True`, then composite onto the label.
 
 ## Protocol and reverse engineering
 
@@ -221,3 +262,9 @@ See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the full command reference, print s
 ## License
 
 MIT
+
+The Home Assistant integration bundles third-party fonts under their own
+licenses, see `custom_components/fichero_printer/fonts/`: DejaVu Sans
+(Bitstream Vera license), Noto Emoji (SIL Open Font License 1.1), Material
+Design Icons (Pictogrammers Free License / Apache 2.0) and Material Symbols
+(Apache 2.0).
