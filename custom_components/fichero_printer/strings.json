@@ -63,6 +63,24 @@
     }
   },
   "entity": {
+    "number": {
+      "offset": {
+        "name": "Print offset"
+      },
+      "label_length": {
+        "name": "Label length"
+      }
+    },
+    "select": {
+      "density": {
+        "name": "Print density",
+        "state": {
+          "light": "Light",
+          "medium": "Medium",
+          "dark": "Dark"
+        }
+      }
+    },
     "sensor": {
       "status": {
         "name": "Status",

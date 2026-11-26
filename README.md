@@ -183,6 +183,12 @@ centred. Set **Print offset (mm)** under **Configure** on the integration:
 positive values move everything to the right (in reading direction), negative
 values to the left, in 0.5 mm steps.
 
+The print offset, label length and print density are also entities on the
+printer's device page (`number.<printer>_print_offset`,
+`number.<printer>_label_length`, `select.<printer>_print_density`), so they can
+be put on a dashboard or changed by automations. Changes there apply to the
+next print without reconnecting.
+
 ### Install with HACS
 
 Use the **Open in HACS** button above, or add

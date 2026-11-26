@@ -1,8 +1,8 @@
 """Constants for the Fichero Label Printer integration."""
 
 DOMAIN = "fichero_printer"
-PLATFORMS = ["sensor"]
-VERSION = "0.2.0"
+PLATFORMS = ["number", "select", "sensor"]
+VERSION = "0.2.1"
 
 CONF_ADDRESS = "address"
 CONF_SWITCHBOT_ENTITY = "switchbot_entity"

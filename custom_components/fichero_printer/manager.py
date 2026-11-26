@@ -152,6 +152,10 @@ class FicheroManager:
         for listener in self._listeners:
             listener()
 
+    def notify_settings_changed(self) -> None:
+        """Refresh entities after a setting changed without a reload."""
+        self._notify()
+
     def _set_status(self, status: str, error: str | None = None) -> None:
         self.status = status
         self.last_error = error

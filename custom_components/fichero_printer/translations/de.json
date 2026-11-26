@@ -63,6 +63,24 @@
     }
   },
   "entity": {
+    "number": {
+      "offset": {
+        "name": "Druck-Versatz"
+      },
+      "label_length": {
+        "name": "Etikettenlänge"
+      }
+    },
+    "select": {
+      "density": {
+        "name": "Druckdichte",
+        "state": {
+          "light": "Hell",
+          "medium": "Mittel",
+          "dark": "Dunkel"
+        }
+      }
+    },
     "sensor": {
       "status": {
         "name": "Status",
