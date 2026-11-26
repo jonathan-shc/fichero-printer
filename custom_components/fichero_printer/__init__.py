@@ -21,6 +21,7 @@ from .const import (
     CONF_LABEL_LENGTH,
     DOMAIN,
     PLATFORMS,
+    SERVICE_CALIBRATE_GAP,
     SERVICE_CONNECT,
     SERVICE_DELETE_FAVORITE,
     SERVICE_DISCONNECT,
@@ -77,6 +78,9 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     async def handle_print(call: ServiceCall) -> None:
         await manager_for(call).async_print(call.data["text"], call.data["copies"], call.data["multiline"])
 
+    async def handle_calibrate(call: ServiceCall) -> None:
+        await manager_for(call).async_calibrate_gap()
+
     async def handle_save(call: ServiceCall) -> None:
         await manager_for(call).async_save_favorite(call.data["text"])
 
@@ -89,6 +93,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_DISCONNECT, handle_disconnect, schema=SERVICE_ENTRY_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_PRINT, handle_print, schema=SERVICE_PRINT_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_SAVE_FAVORITE, handle_save, schema=SERVICE_SAVE_FAVORITE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_CALIBRATE_GAP, handle_calibrate, schema=SERVICE_ENTRY_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_FAVORITE, handle_delete, schema=SERVICE_DELETE_FAVORITE_SCHEMA)
     return True
 

@@ -400,3 +400,27 @@ def test_disconnect_presses_switchbot_only_when_configured(session):
     manager.entry.data = {"switchbot_entity": "switch.bot", "power_off_on_disconnect": True}
     asyncio.run(manager.async_disconnect())
     manager._press_switchbot.assert_awaited_once()
+
+
+def test_gap_calibration_sets_label_mode_then_learns_gap(manager_module, session, monkeypatch):
+    manager, _ = session
+    sent = []
+
+    async def write(_uuid, data, response=False):
+        sent.append(bytes(data))
+        if bytes(data) != b"\x10\xff\x03":  # the gap measurement may stay silent
+            manager._on_notify(None, bytearray(b"OK"))
+
+    manager.client = SimpleNamespace(is_connected=True, write_gatt_char=write)
+    manager._notify_calibrated = Mock()
+    real_wait_for = asyncio.wait_for
+
+    async def quick_wait_for(awaitable, timeout):
+        return await real_wait_for(awaitable, min(timeout, 0.05))
+
+    monkeypatch.setattr(manager_module.asyncio, "wait_for", quick_wait_for)
+    monkeypatch.setattr(manager_module.asyncio, "sleep", AsyncMock())
+    asyncio.run(manager.async_calibrate_gap())
+    assert sent == [b"\x10\xff\x84\x00", b"\x10\xff\x03"]
+    assert manager.status == "connected"
+    manager._notify_calibrated.assert_called_once()

@@ -63,6 +63,11 @@
     }
   },
   "entity": {
+    "button": {
+      "calibrate_gap": {
+        "name": "Etikettenlücke einmessen"
+      }
+    },
     "number": {
       "offset": {
         "name": "Druck-Versatz"
@@ -89,7 +94,8 @@
           "powering_on": "Schaltet ein",
           "connecting": "Verbinde",
           "connected": "Verbunden",
-          "printing": "Druckt"
+          "printing": "Druckt",
+          "calibrating": "Misst Lücke ein"
         }
       }
     }
@@ -166,6 +172,16 @@
         "text": {
           "name": "Favoriten-Text",
           "description": "Textwert, für bestehende Automationen beibehalten."
+        }
+      }
+    },
+    "calibrate_gap": {
+      "name": "Etikettenlücke einmessen",
+      "description": "Misst die Lücke zwischen den Etiketten neu ein, wenn der Drucker leere Etiketten ausgibt. Schiebt ein bis zwei Etiketten vor; danach den Drucker aus- und wieder einschalten.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Drucker",
+          "description": "Der Fichero-Drucker, der verwendet werden soll."
         }
       }
     }

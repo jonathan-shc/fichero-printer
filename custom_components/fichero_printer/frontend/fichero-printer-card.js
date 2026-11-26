@@ -28,6 +28,7 @@ const STRINGS = {
       connecting: "Connecting",
       connected: "Connected",
       printing: "Printing",
+      calibrating: "Calibrating",
     },
   },
   de: {
@@ -59,6 +60,7 @@ const STRINGS = {
       connecting: "Verbinde",
       connected: "Verbunden",
       printing: "Druckt",
+      calibrating: "Misst Lücke ein",
     },
   },
 };
@@ -375,7 +377,7 @@ class FicheroPrinterCard extends HTMLElement {
     }
     missing.hidden = true; main.style.display = "contents";
     const connected = state.attributes.connected === true;
-    const busyState = ["powering_on", "connecting", "printing"].includes(state.state);
+    const busyState = ["powering_on", "connecting", "printing", "calibrating"].includes(state.state);
     $("title").textContent = this._config?.title || t.title;
     $("state").textContent = t.states[state.state] || state.state;
     const dot = this.shadowRoot.querySelector(".dot");

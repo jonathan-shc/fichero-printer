@@ -1,8 +1,8 @@
 """Constants for the Fichero Label Printer integration."""
 
 DOMAIN = "fichero_printer"
-PLATFORMS = ["number", "select", "sensor"]
-VERSION = "0.2.1"
+PLATFORMS = ["button", "number", "select", "sensor"]
+VERSION = "0.2.2"
 
 CONF_ADDRESS = "address"
 CONF_SWITCHBOT_ENTITY = "switchbot_entity"
@@ -24,6 +24,7 @@ SERVICE_DISCONNECT = "disconnect"
 SERVICE_PRINT = "print_label"
 SERVICE_SAVE_FAVORITE = "save_favorite"
 SERVICE_DELETE_FAVORITE = "delete_favorite"
+SERVICE_CALIBRATE_GAP = "calibrate_gap"
 
 WS_PREVIEW = f"{DOMAIN}/preview"
 

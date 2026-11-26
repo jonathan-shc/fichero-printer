@@ -189,6 +189,14 @@ printer's device page (`number.<printer>_print_offset`,
 be put on a dashboard or changed by automations. Changes there apply to the
 next print without reconnecting.
 
+### Blank labels
+
+If the printer keeps feeding blank labels (it lost the gap between labels, for
+example after changing the roll), press **Calibrate label gap** on the device
+page or call `fichero_printer.calibrate_gap`. It switches the printer to gap
+labels and measures the gap again, feeding a label or two. Switch the printer
+off and on again afterwards.
+
 ### Install with HACS
 
 Use the **Open in HACS** button above, or add

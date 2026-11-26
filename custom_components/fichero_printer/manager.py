@@ -99,7 +99,7 @@ class FicheroManager:
         while not self._monitor_stop.is_set():
             try:
                 if self.connected:
-                    if self.status not in ("connected", "printing"):
+                    if self.status not in ("connected", "printing", "calibrating"):
                         self._set_status("connected")
                 elif not self._operation_lock.locked():
                     if self.status != "disconnected":
@@ -463,6 +463,52 @@ class FicheroManager:
             except Exception:
                 self._set_status("disconnected")
                 raise
+
+    async def async_calibrate_gap(self) -> None:
+        """Re-learn the gap between labels.
+
+        Recovers a printer that lost gap detection and feeds blank labels:
+        switch to gap/label paper (10 FF 84 00), then let the printer measure
+        the gap (10 FF 03), which feeds a label or two. The printer should be
+        switched off and on again afterwards.
+        """
+        self._hold = False
+        if not self.connected:
+            await self._wake_and_wait_for_connection()
+        async with self._operation_lock:
+            if not self.connected:
+                raise HomeAssistantError("Printer disconnected before calibrating")
+            try:
+                self._set_status("calibrating")
+                await self._send(bytes([0x10, 0xFF, 0x84, 0x00]), True)
+                await asyncio.sleep(0.1)
+                try:
+                    await self._send(bytes([0x10, 0xFF, 0x03]), True, 10)
+                except HomeAssistantError:
+                    # Some firmware learns the gap without answering.
+                    _LOGGER.debug("No reply to the gap calibration command")
+                await asyncio.sleep(0.5)
+                self._set_status("connected")
+            except Exception:
+                self._set_status("disconnected")
+                raise
+        self._notify_calibrated()
+
+    def _notify_calibrated(self) -> None:
+        """Tell the user to power-cycle the printer after calibrating."""
+        from homeassistant.components import persistent_notification
+
+        german = (self.hass.config.language or "").startswith("de")
+        persistent_notification.async_create(
+            self.hass,
+            "Die Etikettenlücke wurde neu eingemessen. Schalte den Drucker einmal aus "
+            "und wieder ein, bevor du druckst."
+            if german
+            else "The label gap was measured again. Switch the printer off and on "
+            "again before printing.",
+            title="Fichero",
+            notification_id=f"fichero_printer_calibrated_{self.entry.entry_id}",
+        )
 
     async def async_save_favorite(self, text: str) -> None:
         text = text.strip()

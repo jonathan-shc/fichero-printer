@@ -63,6 +63,11 @@
     }
   },
   "entity": {
+    "button": {
+      "calibrate_gap": {
+        "name": "Calibrate label gap"
+      }
+    },
     "number": {
       "offset": {
         "name": "Print offset"
@@ -89,7 +94,8 @@
           "powering_on": "Powering on",
           "connecting": "Connecting",
           "connected": "Connected",
-          "printing": "Printing"
+          "printing": "Printing",
+          "calibrating": "Calibrating"
         }
       }
     }
@@ -166,6 +172,16 @@
         "text": {
           "name": "Favorite text",
           "description": "Text value retained for existing automations."
+        }
+      }
+    },
+    "calibrate_gap": {
+      "name": "Calibrate label gap",
+      "description": "Measure the gap between labels again, for a printer that feeds blank labels. Feeds a label or two; switch the printer off and on afterwards.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Printer",
+          "description": "The Fichero printer to use."
         }
       }
     }

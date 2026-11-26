@@ -86,3 +86,13 @@ delete_favorite:
       required: false
       selector:
         text:
+calibrate_gap:
+  name: Calibrate label gap
+  description: Measure the gap between labels again, for a printer that feeds blank labels. Feeds a label or two; switch the printer off and on afterwards.
+  fields:
+    config_entry_id:
+      name: Printer configuration
+      required: true
+      selector:
+        config_entry:
+          integration: fichero_printer
