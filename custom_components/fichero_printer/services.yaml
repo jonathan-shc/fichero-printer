@@ -30,7 +30,7 @@ print_label:
           integration: fichero_printer
     text:
       name: Text
-      description: "Label text. Inline tokens: [mdi:fridge] or [m3o:kitchen] for icons, [qr:https://…] for a QR code, [barcode:12345] for a Code 128 barcode. Emoji are supported."
+      description: "Label text. Inline tokens: [mdi:fridge] or [m3o:kitchen] for icons, [qr:text or link] for a QR code, [barcode:12345] for a Code 128 barcode. Emoji are supported."
       required: true
       example: "[mdi:fridge] Milk"
       selector:

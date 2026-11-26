@@ -107,7 +107,7 @@
         },
         "text": {
           "name": "Text",
-          "description": "Etikettentext. Platzhalter: [mdi:fridge] oder [m3o:kitchen] für Icons, [qr:https://…] für einen QR-Code, [barcode:12345] für einen Code-128-Barcode. Emojis werden unterstützt."
+          "description": "Etikettentext. Platzhalter: [mdi:fridge] oder [m3o:kitchen] für Icons, [qr:Text oder Link] für einen QR-Code, [barcode:12345] für einen Code-128-Barcode. Emojis werden unterstützt."
         },
         "copies": {
           "name": "Anzahl",
